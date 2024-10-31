@@ -60,10 +60,23 @@ class SelfAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.shape
+        assert T == self.block_size
+        assert C == self.embed_dim
+
+        # Linearly project queries, keys, and values
         query = self.query_linear(x)
         key = self.key_linear(x)
         value = self.value_linear(x)
 
+        # Compute attention weights
+        logits = torch.einsum("btc,btc->bth", query, key) / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        if self.is_decoder:
+            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder
+        weights = F.softmax(logits, dim=-1) # B x T x T
+
+        attention = torch.einsum("bth,btc->btc", weights, value) # B x T x T @ B x T x C -> B x T x C
+        return attention
+        
 
 
 
