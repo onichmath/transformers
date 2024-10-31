@@ -37,13 +37,21 @@ Encoder should output sequence of embeddings for each word in input sequence
 - Loss updates weights of both encoder and classifier through backpropagation simultaneously
 """
 
+class MultiHeadAttention(nn.Module):
+    def __init__(self):
+        super(MultiHeadAttention).__init__()
+        self.embed_dim = n_embd
+        self.num_heads = n_head
+        self.head_dim = self.embed_dim // self.num_heads
+        pass
+
 
 class LanguageModel(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
     # crossentropyLoss needs B x C x T
     def __init__(self, vocab_size):
-        super().__init__()
+        super(LanguageModel).__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.pos_embedding_table = nn.Embedding(block_size, n_embd)
 
