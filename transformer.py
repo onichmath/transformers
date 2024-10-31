@@ -36,6 +36,31 @@ Encoder should output sequence of embeddings for each word in input sequence
 3. Training 
 - Loss updates weights of both encoder and classifier through backpropagation simultaneously
 """
+# Encoder self attention attends to all tokens
+# Decoder self attention attends autoregressively to all tokens before the current token
+class SingleHeadAttention(nn.Module):
+    # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
+    def __init__(self, head_dim, block_size, is_decoder=False):
+        super(SingleHeadAttention).__init__()
+        self.embed_dim = n_embd
+        self.head_dim = head_dim
+        self.head_dim = self.embed_dim // self.num_heads
+        self.block_size = block_size
+        self.is_decoder = is_decoder
+
+        # Channels x Head size
+        self.query = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.key = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.value = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
+
+        if self.is_decoder:
+            # Buffer instead of parameter
+            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
+
+
+    def forward(self, x):
+        B, T, C = x.shape
+
 
 class MultiHeadAttention(nn.Module):
     def __init__(self):
@@ -44,7 +69,6 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = n_head
         self.head_dim = self.embed_dim // self.num_heads
         pass
-
 
 class LanguageModel(nn.Module):
     # Batch x Time x Channel 
