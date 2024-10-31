@@ -24,9 +24,19 @@ n_hidden = 100  # Hidden size for the classifier
 n_output = 3  # Output size for the classifier, we have 3 classes
 epochs_CLS = 15 # epochs for classifier training
 
-class Encoder(nn.Module):
+class LanguageModel(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
     # crossentropyLoss needs B x C x T
-    def __init__(self):
+    def __init__(self, vocab_size):
         super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.pos_embedding_table = nn.Embedding(block_size, n_embd)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        token_embeddings = self.token_embedding_table(x) # B x T x C
+        pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device)) # T x C
+        x = token_embeddings + pos_embeddings
+
+
