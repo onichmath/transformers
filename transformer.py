@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F 
 
+""" Hyperparameters to use for training to roughly match 
+the numbers mentioned in the assignment description """
 batch_size = 16  # Number of independent sequences  we will process in parallel
 block_size = 32  # Maximum context length for predictions
 learning_rate = 1e-3  # Learning rate for the optimizer
@@ -24,6 +26,18 @@ n_hidden = 100  # Hidden size for the classifier
 n_output = 3  # Output size for the classifier, we have 3 classes
 epochs_CLS = 15 # epochs for classifier training
 
+"""
+1. Encoder
+Encoder should output sequence of embeddings for each word in input sequence
+- provide mean of embeddings across sequence dimension to linear classifier
+2. Feedforward classifier
+- receives the output from transformer encoder and makes predictions
+- one hidden layer 
+3. Training 
+- Loss updates weights of both encoder and classifier through backpropagation simultaneously
+"""
+
+
 class LanguageModel(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
@@ -34,6 +48,8 @@ class LanguageModel(nn.Module):
         self.pos_embedding_table = nn.Embedding(block_size, n_embd)
 
     def forward(self, x):
+        # Based loosely off of the transformer architecture from the Attention is All You Need paper
+        # Combined with the implementation of "Let's Build GPT: from scratch, in code, spelled out"
         B, T, C = x.shape
         token_embeddings = self.token_embedding_table(x) # B x T x C
         pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device)) # T x C
