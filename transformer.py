@@ -91,6 +91,25 @@ class MultiHeadAttention(nn.Module):
     def forward(self, x):
         return torch.cat([head(x) for head in self.heads], dim=-1)
 
+class FeedForward(nn.Module):
+    # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
+    def __init__(self, embed_dim, hidden_dim=None):
+        super(FeedForward).__init__()
+        if hidden_dim is None:
+            self.net = nn.Sequential(
+                nn.Linear(embed_dim, embed_dim),
+                nn.ReLU(),
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(embed_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, embed_dim)
+            )
+
+    def forward(self, x):
+        return self.net(x)
+
 class LanguageModel(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
