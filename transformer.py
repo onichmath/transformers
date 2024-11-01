@@ -41,9 +41,9 @@ Encoder should output sequence of embeddings for each word in input sequence
 class SelfAttentionHead(nn.Module):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
-    def __init__(self, block_size, head_dim, is_decoder=False):
+    def __init__(self, embed_dim, block_size, head_dim, is_decoder=False):
         super().__init__()
-        self.embed_dim = n_embd
+        self.embed_dim = embed_dim 
         self.head_dim = head_dim
         self.block_size = block_size
         self.is_decoder = is_decoder
@@ -82,9 +82,11 @@ class SelfAttentionHead(nn.Module):
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
-    def __init__(self, num_heads, head_dim, block_size, is_decoder=False):
+    def __init__(self, num_heads, embed_dim, block_size, is_decoder=False):
         super(MultiHeadAttention).__init__()
-        self.heads = nn.ModuleList([SelfAttentionHead(block_size, head_dim, is_decoder) for _ in range(num_heads)])
+        assert embed_dim % num_heads == 0
+        self.head_dim = embed_dim // num_heads
+        self.heads = nn.ModuleList([SelfAttentionHead(embed_dim, block_size, self.head_dim, is_decoder) for _ in range(num_heads)])
 
     def forward(self, x):
         return torch.cat([head(x) for head in self.heads], dim=-1)
