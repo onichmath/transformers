@@ -77,6 +77,9 @@ def compute_classifier_accuracy(classifier, data_loader):
         classifier.train()
         return accuracy
 
+def train_classifier(classifier, data_loader, optimizer, epochs=15):
+    """ Train the classifier on the data in data_loader for the specified number of epochs."""
+    pass
 
 def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     """ Compute the perplexity of the decoderLMmodel on the data in data_loader.
@@ -98,6 +101,10 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
 
     decoderLMmodel.train()
     return perplexity
+
+def train_decoder(decoder, data_loader, optimizer, max_iters=500):
+    """ Train the decoder on the data in data_loader for the specified number of iterations."""
+    pass
 
 def main():
 
