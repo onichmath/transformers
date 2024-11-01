@@ -64,17 +64,19 @@ class SelfAttention(nn.Module):
         assert C == self.embed_dim
 
         # Linearly project queries, keys, and values
-        query = self.query_linear(x)
-        key = self.key_linear(x)
-        value = self.value_linear(x)
+        query = self.query_linear(x) # B x T x C
+        key = self.key_linear(x) # B x T x C
+        value = self.value_linear(x) # B x T x C
 
         # Compute attention weights
-        logits = torch.einsum("btc,btc->bth", query, key) / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        logits = torch.einsum("btc,bcT->bth", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
+        logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        # If decoder, mask out future tokens
         if self.is_decoder:
-            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder
+            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
         weights = F.softmax(logits, dim=-1) # B x T x T
 
-        attention = torch.einsum("bth,btc->btc", weights, value) # B x T x T @ B x T x C -> B x T x C
+        attention = torch.einsum("btt,btc->btc", weights, value) # B x T x T @ B x T x C -> B x T x C
         return attention
         
 
