@@ -40,11 +40,10 @@ Encoder should output sequence of embeddings for each word in input sequence
 # Decoder self attention attends autoregressively to all tokens before the current token
 class SelfAttention(nn.Module):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
-    def __init__(self, block_size, n_heads=1, is_decoder=False):
+    def __init__(self, block_size, head_dim, is_decoder=False):
         super().__init__()
         self.embed_dim = n_embd
-        self.num_heads = n_heads
-        self.head_dim = self.embed_dim // self.num_heads
+        self.head_dim = head_dim
         self.block_size = block_size
         self.is_decoder = is_decoder
 
