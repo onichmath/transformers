@@ -163,11 +163,13 @@ class Transformer(nn.Module):
         x = token_embeddings + pos_embeddings
         x = self.blocks(x)
         x = self.layer_norm(x)
+        x = x.mean(dim=1) # Mean across the time dimension
         logits = self.classifier(x)
 
         cross_entropy_loss = None
-        if y:
-            cross_entropy_loss = F.cross_entropy(logits.permute(0, 2, 1), y) # Logits: B x T x C -> B x C x T
+        if y is not None:
+            B, C = logits.shape
+            cross_entropy_loss = F.cross_entropy(logits, y)
 
         return logits, cross_entropy_loss
 
