@@ -41,7 +41,7 @@ Encoder should output sequence of embeddings for each word in input sequence
 class SelfAttentionHead(nn.Module):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
-    def __init__(self, embed_dim, block_size, head_dim, is_decoder=False):
+    def __init__(self, embed_dim, block_size, head_dim, is_decoder=False, dropout=0.0):
         super().__init__()
         self.embed_dim = embed_dim 
         self.head_dim = head_dim
@@ -57,6 +57,7 @@ class SelfAttentionHead(nn.Module):
             # Buffer instead of parameter
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
 
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         B, T, C = x.shape
@@ -75,6 +76,7 @@ class SelfAttentionHead(nn.Module):
         if self.is_decoder:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
         weights = F.softmax(logits, dim=-1) # B x T x T
+        weights = self.dropout(weights)
 
         attention = torch.einsum("btt,btc->btc", weights, value) # B x T x T @ B x T x C -> B x T x C
         return attention
@@ -82,28 +84,30 @@ class SelfAttentionHead(nn.Module):
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
-    def __init__(self, num_heads, embed_dim, block_size, is_decoder=False):
+    def __init__(self, num_heads, embed_dim, block_size, is_decoder=False, dropout=0.0):
         super(MultiHeadAttention).__init__()
         assert embed_dim % num_heads == 0
         self.head_dim = embed_dim // num_heads
         self.heads = nn.ModuleList([SelfAttentionHead(embed_dim, block_size, self.head_dim, is_decoder) for _ in range(num_heads)])
         self.projection = nn.Linear(embed_dim, embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         # Multihead attention based off "Attention is All You Need" paper
         concatenated_attention = torch.cat([head(x) for head in self.heads], dim=-1)
-        return self.projection(concatenated_attention)
+        concatenated_attention= self.dropout(self.projection(concatenated_attention))
 
 class FeedForward(nn.Module):
     # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
-    def __init__(self, embed_dim, hidden_dim=None):
+    def __init__(self, embed_dim, hidden_dim=None, dropout=0.0):
         super(FeedForward).__init__()
         if hidden_dim is None:
             hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
         self.ff_net = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, embed_dim)
+            nn.Linear(hidden_dim, embed_dim),
+            nn.Dropout(dropout)
         )
 
     def forward(self, x):
@@ -111,10 +115,11 @@ class FeedForward(nn.Module):
 
 class TransformerBlock(nn.Module):
     # Single transformer block based off "Attention is All You Need" paper
-    def __init__(self, embed_dim, num_heads, block_size, is_decoder=False):
+    def __init__(self, embed_dim, num_heads, block_size, is_decoder=False, dropout=0.0):
         super(TransformerBlock).__init__()
-        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size, is_decoder)
-        self.feed_forward = FeedForward(embed_dim)
+        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size, is_decoder, dropout)
+        self.feed_forward = FeedForward(embed_dim, dropout=dropout)
+
         self.layer_norm1 = nn.LayerNorm(embed_dim) # Pre-normalization
         self.layer_norm2 = nn.LayerNorm(embed_dim)
 
@@ -128,12 +133,13 @@ class Transformer(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
     # crossentropyLoss needs B x C x T
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, is_decoder=False):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, is_decoder=False, dropout=0.0):
         super(Transformer).__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
         self.pos_embedding_table = nn.Embedding(block_size, embed_dim) # TODO: change to absolute position embedding
-        self.encoder = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, is_decoder) for _ in range(num_layers)])
-
+        self.encoder = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, is_decoder, dropout) for _ in range(num_layers)])
+        self.layer_norm = nn.LayerNorm(embed_dim)
+        self.classifier = nn.Linear(embed_dim, 3)
 
     def forward(self, x):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
