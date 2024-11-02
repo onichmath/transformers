@@ -99,7 +99,7 @@ class FeedForward(nn.Module):
     def __init__(self, embed_dim, hidden_dim=None):
         super(FeedForward).__init__()
         if hidden_dim is None:
-            hidden_dim = embed_dim
+            hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
         self.ff_net = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
@@ -115,11 +115,13 @@ class EncoderBlock(nn.Module):
         super(EncoderBlock).__init__()
         self.attention = MultiHeadAttention(num_heads, embed_dim, block_size)
         self.feed_forward = FeedForward(embed_dim)
+        self.layer_norm1 = nn.LayerNorm(embed_dim) # Pre-normalization
+        self.layer_norm2 = nn.LayerNorm(embed_dim)
 
     def forward(self, x):
         # Residual connection around each sub-block
-        x = x + self.attention(x)
-        x = x + self.feed_forward(x)
+        x = x + self.attention(self.layer_norm1(x))
+        x = x + self.feed_forward(self.layer_norm2(x))
         return x
 
 class LanguageModel(nn.Module):
