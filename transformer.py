@@ -109,11 +109,11 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.ff_net(x)
 
-class EncoderBlock(nn.Module):
-    # Single transformer block based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
-    def __init__(self, embed_dim, num_heads, block_size):
-        super(EncoderBlock).__init__()
-        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size)
+class TransformerBlock(nn.Module):
+    # Single transformer block based off "Attention is All You Need" paper
+    def __init__(self, embed_dim, num_heads, block_size, is_decoder=False):
+        super(TransformerBlock).__init__()
+        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size, is_decoder)
         self.feed_forward = FeedForward(embed_dim)
         self.layer_norm1 = nn.LayerNorm(embed_dim) # Pre-normalization
         self.layer_norm2 = nn.LayerNorm(embed_dim)
@@ -124,14 +124,16 @@ class EncoderBlock(nn.Module):
         x = x + self.feed_forward(self.layer_norm2(x))
         return x
 
-class LanguageModel(nn.Module):
+class Transformer(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
     # crossentropyLoss needs B x C x T
-    def __init__(self, vocab_size):
-        super(LanguageModel).__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-        self.pos_embedding_table = nn.Embedding(block_size, n_embd) # TODO: change to absolute position embedding
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, is_decoder=False):
+        super(Transformer).__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
+        self.pos_embedding_table = nn.Embedding(block_size, embed_dim) # TODO: change to absolute position embedding
+        self.encoder = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, is_decoder) for _ in range(num_layers)])
+
 
     def forward(self, x):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
