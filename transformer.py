@@ -95,7 +95,8 @@ class MultiHeadAttention(nn.Module):
     def forward(self, x):
         # Multihead attention based off "Attention is All You Need" paper
         concatenated_attention = torch.cat([head(x) for head in self.heads], dim=-1)
-        concatenated_attention= self.dropout(self.proj(concatenated_attention))
+        concatenated_attention = self.dropout(self.proj(concatenated_attention))
+        return concatenated_attention
 
 class FeedForward(nn.Module):
     # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
@@ -139,14 +140,14 @@ class Transformer(nn.Module):
             hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
         self.pos_embedding_table = nn.Embedding(block_size, embed_dim) # TODO: change to absolute position embedding
-        self.encoder = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, is_decoder, dropout) for _ in range(num_layers)])
+        self.blocks = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, is_decoder, dropout) for _ in range(num_layers)])
         self.layer_norm = nn.LayerNorm(embed_dim)
         if is_decoder:
             self.classifier = nn.Linear(embed_dim, vocab_size)
         else:
             self.classifier = nn.Linear(embed_dim, output)
 
-    def forward(self, x):
+    def forward(self, x, y=None):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
         # Combined with the implementation of "Let's Build GPT: from scratch, in code, spelled out"
         B, T, C = x.shape
