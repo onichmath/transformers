@@ -48,8 +48,6 @@ def load_texts(directory):
             texts.append(file.read())
     return texts
 
-
-
 def collate_batch(batch):
     """ Collate a batch of data into a single tensor with padding."""
     data, labels = zip(*batch)  # Separate the data and labels
@@ -77,9 +75,24 @@ def compute_classifier_accuracy(classifier, data_loader):
         classifier.train()
         return accuracy
 
-def train_classifier(classifier, data_loader, optimizer, epochs=15):
+def train_classifier_epoch(classifier, data_loader, optimizer):
     """ Train the classifier on the data in data_loader for the specified number of epochs."""
-    pass
+    classifier.train()
+    train_loss, correct = 0, 0
+    for X, y in data_loader:
+        X, y = X.to(device), y.to(device)
+
+        preds, loss = classifier(X)
+        train_loss += loss.item()
+        correct += (preds == y).sum().item()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    mean_loss = train_loss / len(data_loader)
+    accuracy = correct / len(data_loader.dataset)
+    return mean_loss, accuracy
 
 def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     """ Compute the perplexity of the decoderLMmodel on the data in data_loader.
@@ -87,9 +100,10 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     """
     decoderLMmodel.eval()
     losses= []
+    total_loss = 0
     for X, Y in data_loader:
         X, Y = X.to(device), Y.to(device)
-        loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
+        _, loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
         losses.append(loss.item())
         total_loss += loss.item()
         if len(losses) >= eval_iters: break
