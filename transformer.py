@@ -87,28 +87,27 @@ class MultiHeadAttention(nn.Module):
         assert embed_dim % num_heads == 0
         self.head_dim = embed_dim // num_heads
         self.heads = nn.ModuleList([SelfAttentionHead(embed_dim, block_size, self.head_dim, is_decoder) for _ in range(num_heads)])
+        self.projection = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, x):
-        return torch.cat([head(x) for head in self.heads], dim=-1)
+        # Multihead attention based off "Attention is All You Need" paper
+        concatenated_attention = torch.cat([head(x) for head in self.heads], dim=-1)
+        return self.projection(concatenated_attention)
 
 class FeedForward(nn.Module):
     # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     def __init__(self, embed_dim, hidden_dim=None):
         super(FeedForward).__init__()
         if hidden_dim is None:
-            self.net = nn.Sequential(
-                nn.Linear(embed_dim, embed_dim),
-                nn.ReLU(),
-            )
-        else:
-            self.net = nn.Sequential(
-                nn.Linear(embed_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, embed_dim)
-            )
+            hidden_dim = embed_dim
+        self.ff_net = nn.Sequential(
+            nn.Linear(embed_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, embed_dim)
+        )
 
     def forward(self, x):
-        return self.net(x)
+        return self.ff_net(x)
 
 class EncoderBlock(nn.Module):
     # Single transformer block based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
