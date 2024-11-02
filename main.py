@@ -10,8 +10,8 @@ from transformer import Transformer
 
 seed = 42
 
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 
 """ Hyperparameters to use for training to roughly match 
 the numbers mentioned in the assignment description """
@@ -66,14 +66,13 @@ def compute_classifier_accuracy(classifier, data_loader):
     classifier.eval()
     total_correct = 0
     total_samples = 0
+    size = len(data_loader.dataset)
     with torch.no_grad():
         for X, Y in data_loader:
             X, Y = X.to(device), Y.to(device)
-            outputs = classifier(X)
-            _, predicted = torch.max(outputs.data, 1)
-            total_correct += (predicted == Y).sum().item()
-            total_samples += Y.size(0)
-        accuracy = (100 * total_correct / total_samples)
+            preds, _ = classifier(X)
+            total_correct += (preds.argmax(1) == Y).type(torch.float).sum().item()
+        accuracy = total_correct / size
         classifier.train()
         return accuracy
 
@@ -81,12 +80,12 @@ def train_classifier_epoch(classifier, data_loader, optimizer):
     """ Train the classifier on the data in data_loader for the specified number of epochs."""
     classifier.train()
     train_loss, correct = 0, 0
-    for X, y in data_loader:
+    for batch, (X, y) in enumerate(data_loader):
         X, y = X.to(device), y.to(device)
 
         preds, loss = classifier(X, y)
         train_loss += loss.item()
-        correct += (preds == y).sum().item()
+        correct += (preds.argmax(1) == y).type(torch.float).sum().item() # From hw1
 
         optimizer.zero_grad()
         loss.backward()
@@ -136,7 +135,7 @@ def main():
     test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
 
     classifier = Transformer(
-            vocab_size=len(tokenizer.vocab),
+            vocab_size=tokenizer.vocab_size,
             embed_dim=n_embd,
             block_size=block_size,
             num_heads=n_head,
