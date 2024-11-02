@@ -70,7 +70,8 @@ class SelfAttentionHead(nn.Module):
         value = self.value_linear(x) # B x T x C
 
         # Compute attention weights
-        logits = torch.einsum("btc,bcT->bth", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
+        # logits = torch.einsum("btc,bcT->btt", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
+        logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
         # If decoder, mask out future tokens
         if self.is_decoder:
@@ -156,7 +157,7 @@ class Transformer(nn.Module):
     def forward(self, x, y=None):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
         # Combined with the implementation of "Let's Build GPT: from scratch, in code, spelled out"
-        B, T, C = x.shape
+        B, T = x.shape
         token_embeddings = self.token_embedding_table(x) # B x T x C
         pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device)) # T x C
         x = token_embeddings + pos_embeddings
