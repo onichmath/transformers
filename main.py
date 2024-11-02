@@ -21,6 +21,7 @@ learning_rate = 1e-3  # Learning rate for the optimizer
 n_embd = 64  # Embedding dimension
 n_head = 2  # Number of attention heads
 n_layer = 4  # Number of transformer layers
+dropout = 0.1
 
 
 eval_interval = 100  # How often to evaluate train and test perplexity during training
@@ -140,6 +141,7 @@ def main():
             block_size=block_size,
             num_heads=n_head,
             num_layers=n_layer,
+            dropout=dropout,
             ).to(device)
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
