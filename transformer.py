@@ -75,6 +75,7 @@ class SelfAttentionHead(nn.Module):
         # If decoder, mask out future tokens
         if self.is_decoder:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
+
         weights = F.softmax(logits, dim=-1) # B x T x T
         weights = self.dropout(weights)
 
@@ -88,6 +89,7 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         assert embed_dim % num_heads == 0
         self.head_dim = embed_dim // num_heads
+
         self.heads = nn.ModuleList([SelfAttentionHead(embed_dim, block_size, self.head_dim, is_decoder) for _ in range(num_heads)])
         self.proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
@@ -104,6 +106,7 @@ class FeedForward(nn.Module):
         super().__init__()
         if hidden_dim is None:
             hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
+
         self.ff_net = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
             nn.ReLU(),
@@ -138,10 +141,13 @@ class Transformer(nn.Module):
         super().__init__()
         if not hidden_dim:
             hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
+
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
         self.pos_embedding_table = nn.Embedding(block_size, embed_dim) # TODO: change to absolute position embedding
+
         self.blocks = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, is_decoder, dropout) for _ in range(num_layers)])
         self.layer_norm = nn.LayerNorm(embed_dim)
+
         if is_decoder:
             self.classifier = nn.Linear(embed_dim, vocab_size)
         else:
@@ -154,5 +160,14 @@ class Transformer(nn.Module):
         token_embeddings = self.token_embedding_table(x) # B x T x C
         pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device)) # T x C
         x = token_embeddings + pos_embeddings
+        x = self.blocks(x)
+        x = self.layer_norm(x)
+        logits = self.classifier(x)
+
+        cross_entropy_loss = None
+        if y:
+            cross_entropy_loss = F.cross_entropy(logits.permute(0, 2, 1), y) # Logits: B x T x C -> B x C x T
+
+        return logits, cross_entropy_loss
 
 
