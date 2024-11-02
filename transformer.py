@@ -110,6 +110,19 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+class EncoderBlock(nn.Module):
+    # Single transformer block based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
+    def __init__(self, embed_dim, num_heads, block_size):
+        super(EncoderBlock).__init__()
+        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size)
+        self.feed_forward = FeedForward(embed_dim)
+
+    def forward(self, x):
+        # Residual connection around each sub-block
+        x = x + self.attention(x)
+        x = x + self.feed_forward(x)
+        return x
+
 class LanguageModel(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
@@ -117,7 +130,7 @@ class LanguageModel(nn.Module):
     def __init__(self, vocab_size):
         super(LanguageModel).__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
-        self.pos_embedding_table = nn.Embedding(block_size, n_embd)
+        self.pos_embedding_table = nn.Embedding(block_size, n_embd) # TODO: change to absolute position embedding
 
     def forward(self, x):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
