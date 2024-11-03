@@ -190,7 +190,7 @@ def decoder_experiment(tokenizer, utils=False):
             embed_dim=n_embd,
             block_size=block_size,
             num_heads=n_head,
-            hidden_dim=n_hidden,
+            hidden_dim=n_embd * 4,
             num_layers=n_layer,
             dropout=dropout,
             ).to(device)
@@ -205,7 +205,7 @@ def decoder_experiment(tokenizer, utils=False):
 
     for epoch in range(1):
         train_loss, train_perplexity = train_decoder_epoch(decoder, train_LM_loader, optimizer)
-        print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
+        # print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
         # if epoch % eval_interval == 0:
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
