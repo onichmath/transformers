@@ -187,7 +187,7 @@ def main():
 
     # Decoder
     train_LM_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/train_LM.txt"),  block_size)
-    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
+    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
 
     decoder = Decoder(
             vocab_size=tokenizer.vocab_size,
@@ -212,31 +212,11 @@ def main():
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
 
-
-    test_LM_hbush_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
-    test_LM_wbush_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
-    test_LM_obama_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
-    # 
-    test_LM_hbush_loader = DataLoader(test_LM_hbush_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
-    test_LM_wbush_loader = DataLoader(test_LM_wbush_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
-    test_LM_obama_loader = DataLoader(test_LM_obama_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
-    test_hbush_perplexity = compute_perplexity(decoder, test_LM_hbush_loader, eval_iters)
-    test_wbush_perplexity = compute_perplexity(decoder, test_LM_wbush_loader, eval_iters)
-    test_obama_perplexity = compute_perplexity(decoder, test_LM_obama_loader, eval_iters)
-    print(f"Test perplexity on hbush: {test_hbush_perplexity}")
-    print(f"Test perplexity on wbush: {test_wbush_perplexity}")
-    print(f"Test perplexity on obama: {test_obama_perplexity}")
-
-
-
-    # # for the language modeling task, you will iterate over the training data for a fixed number of iterations like this:
-    # for i, (xb, yb) in enumerate(train_LM_loader):
-    #     if i >= max_iters:
-    #         break
-    #     xb, yb = xb.to(device), yb.to(device)
-    #     # LM training code here
-
-    
+    for president in ["hbush", "wbush", "obama"]:
+        test_dataset = LanguageModelingDataset(tokenizer, read_file(f"speechesdataset/test_LM_{president}.txt"), block_size)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+        test_perplexity = compute_perplexity(decoder, test_loader, eval_iters)
+        print(f"Test perplexity on {president}: {test_perplexity}")
 
 
 
