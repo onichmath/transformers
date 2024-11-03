@@ -147,13 +147,7 @@ def read_file(file):
     with open(file, 'r', encoding='utf-8') as f:
         return f.read()
 
-def main():
-
-    print("Loading data and creating tokenizer ...")
-    texts = load_texts('speechesdataset')
-    tokenizer = SimpleTokenizer(' '.join(texts)) # create a tokenizer from the data
-    print("Vocabulary size is", tokenizer.vocab_size)
-
+def encoder_experiment(tokenizer, utils=False):
     # Encoder
     train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
     train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
@@ -170,21 +164,23 @@ def main():
             num_layers=n_layer,
             dropout=dropout,
             ).to(device)
+    sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     classifier_utils = Utilities(tokenizer, classifier)
-    # classifier_utils.sanity_check("Hello world.", block_size, device)
+    if utils:
+        classifier_utils.sanity_check(sanity_string, block_size, device)
 
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     # for the classification  task, you will train for a fixed number of epochs like this:
     for epoch in range(epochs_CLS):
-        break
         train_loss, train_accuracy = train_classifier_epoch(classifier, train_CLS_loader, optimizer)
         test_accuracy = compute_classifier_accuracy(classifier, test_CLS_loader)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
-    # classifier_utils.sanity_check("Hello world.", block_size, device)
+    if utils:
+        classifier_utils.sanity_check(sanity_string, block_size, device)
 
-
+def decoder_experiment(tokenizer, utils=False):
     # Decoder
     train_LM_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/train_LM.txt"),  block_size)
     train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
@@ -201,7 +197,9 @@ def main():
     print("Training decoder model ...")
 
     decoder_utils = Utilities(tokenizer, decoder)
-    # decoder_utils.sanity_check("Hello world.", block_size, device)
+    sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
+    if utils:
+        decoder_utils.sanity_check(sanity_string, block_size, device)
 
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
@@ -211,6 +209,8 @@ def main():
         # if epoch % eval_interval == 0:
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
+    if utils:
+        decoder_utils.sanity_check(sanity_string, block_size, device)
 
     for president in ["hbush", "wbush", "obama"]:
         test_dataset = LanguageModelingDataset(tokenizer, read_file(f"speechesdataset/test_LM_{president}.txt"), block_size)
@@ -219,6 +219,13 @@ def main():
         print(f"Test perplexity on {president}: {test_perplexity}")
 
 
+def main():
+    print("Loading data and creating tokenizer ...")
+    texts = load_texts('speechesdataset')
+    tokenizer = SimpleTokenizer(' '.join(texts)) # create a tokenizer from the data
+    print("Vocabulary size is", tokenizer.vocab_size)
+
+    decoder_experiment(tokenizer, utils=False)
 
 if __name__ == "__main__":
     main()
