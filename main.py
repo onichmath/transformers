@@ -6,6 +6,7 @@ import os
 from tokenizer import SimpleTokenizer
 from dataset import SpeechesClassificationDataset, LanguageModelingDataset
 from transformer import Decoder, Encoder
+from utilities import Utilities
 
 
 seed = 42
@@ -71,7 +72,7 @@ def compute_classifier_accuracy(classifier, data_loader):
     with torch.no_grad():
         for X, Y in data_loader:
             X, Y = X.to(device), Y.to(device)
-            preds, _ = classifier(X)
+            preds, _, _ = classifier(X)
             total_correct += (preds.argmax(1) == Y).type(torch.float).sum().item()
         accuracy = total_correct / size
         classifier.train()
@@ -84,7 +85,7 @@ def train_classifier_epoch(classifier, data_loader, optimizer):
     for batch, (X, Y) in enumerate(data_loader):
         X, Y = X.to(device), Y.to(device)
 
-        preds, loss = classifier(X, Y)
+        preds, loss, _ = classifier(X, Y)
         train_loss += loss.item()
         correct += (preds.argmax(1) == Y).type(torch.float).sum().item() # From hw1
 
@@ -105,7 +106,7 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     total_loss = 0
     for batch, (X, Y) in enumerate(data_loader):
         X, Y = X.to(device), Y.to(device)
-        _, loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
+        _, loss, _ = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
         losses.append(loss.item())
         total_loss += loss.item()
         if len(losses) >= eval_iters: break
@@ -128,7 +129,7 @@ def train_decoder_epoch(decoder, data_loader, optimizer):
             break
         X, Y = X.to(device), Y.to(device)
 
-        _, loss = decoder(X, Y)
+        _, loss, _ = decoder(X, Y)
         losses.append(loss.item())
         train_loss += loss.item()
 
@@ -165,15 +166,19 @@ def main():
             num_layers=n_layer,
             dropout=dropout,
             ).to(device)
+    utils = Utilities(tokenizer, classifier)
+    utils.sanity_check("Hello world.", block_size, device)
+
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     # for the classification  task, you will train for a fixed number of epochs like this:
     for epoch in range(epochs_CLS):
-        break
         train_loss, train_accuracy = train_classifier_epoch(classifier, train_CLS_loader, optimizer)
         test_accuracy = compute_classifier_accuracy(classifier, test_CLS_loader)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
+    utils.sanity_check("Hello world.", block_size, device)
+    return
 
 
     # Decoder

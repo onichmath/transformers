@@ -7,19 +7,19 @@ class Utilities:
         self.tokenizer = tokenizer
         self.model = model
 
-    def sanity_check(self, sentence, block_size):
+    def sanity_check(self, sentence, block_size, device):
         # Encode the sentence using the tokenizer
         wordids = self.tokenizer.encode(sentence)
 
         # Prepare the padded input for the model
         padded_sentence = wordids[:block_size] + [0] * (block_size - len(wordids))
-        input_tensor = torch.tensor(padded_sentence, dtype=torch.long).unsqueeze(0)
+        input_tensor = torch.tensor(padded_sentence, dtype=torch.long).unsqueeze(0).to(device)
 
         # Display input tensor shape
         print("Input tensor shape:", input_tensor.shape)
 
         # Process the input tensor through the encoder model
-        _,  attn_maps = self.model(input_tensor) # Ignore the output of the model, and only get the attention maps; make sure your encoder returns the attention maps
+        _, _,  attn_maps = self.model(input_tensor) # Ignore the output of the model, and only get the attention maps; make sure your encoder returns the attention maps
 
         # Display the number of attention maps
         print("Number of attention maps:", len(attn_maps))
