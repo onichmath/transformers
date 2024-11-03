@@ -21,7 +21,7 @@ learning_rate = 1e-3  # Learning rate for the optimizer
 n_embd = 64  # Embedding dimension
 n_head = 2  # Number of attention heads
 n_layer = 4  # Number of transformer layers
-dropout = 0.1
+dropout = 0.2
 
 
 eval_interval = 100  # How often to evaluate train and test perplexity during training
@@ -118,7 +118,7 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     decoderLMmodel.train()
     return perplexity
 
-def train_decoder(decoder, data_loader, optimizer, max_iters=500):
+def train_decoder_epoch(decoder, data_loader, optimizer):
     """ Train the decoder on the data in data_loader for the specified number of iterations."""
     pass
 
@@ -142,6 +142,7 @@ def main():
             num_heads=n_head,
             num_layers=n_layer,
             dropout=dropout,
+            output_size=n_output
             ).to(device)
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
@@ -150,14 +151,43 @@ def main():
         train_loss, train_accuracy = train_classifier_epoch(classifier, train_CLS_loader, optimizer)
         test_accuracy = compute_classifier_accuracy(classifier, test_CLS_loader)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
+    print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
 
+    inputfile = "speechesdataset/train_LM.txt"
+    with open(inputfile, 'r', encoding='utf-8') as f:
+        lmtrainText = f.read()
+    train_LM_dataset = LanguageModelingDataset(tokenizer, lmtrainText,  block_size)
+    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
 
-  
-    # inputfile = "speechesdataset/train_LM.txt"
-    # with open(inputfile, 'r', encoding='utf-8') as f:
-    #     lmtrainText = f.read()
-    # train_LM_dataset = LanguageModelingDataset(tokenizer, lmtrainText,  block_size)
-    # train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
+    test_LM_hbush_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_hbush.txt", block_size)
+    test_LM_wbush_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_wbush.txt", block_size)
+    test_LM_obama_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_obama.txt", block_size)
+    
+    test_LM_hbush_loader = DataLoader(test_LM_hbush_dataset, batch_size=batch_size, shuffle=False)
+    test_LM_wbush_loader = DataLoader(test_LM_wbush_dataset, batch_size=batch_size, shuffle=False)
+    test_LM_obama_loader = DataLoader(test_LM_obama_dataset, batch_size=batch_size, shuffle=False)
+
+    decoder = Transformer(
+            vocab_size=tokenizer.vocab_size,
+            embed_dim=n_embd,
+            block_size=block_size,
+            num_heads=n_head,
+            hidden_dim=n_hidden,
+            num_layers=n_layer,
+            dropout=dropout,
+            is_decoder=True
+            ).to(device)
+
+    optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
+
+    for epoch in range(max_iters):
+        train_loss, train_accuracy = train_decoder_epoch(decoder, train_LM_loader, optimizer)
+        test_hbush_perplexity = compute_perplexity(decoder, test_LM_hbush_loader, eval_iters)
+        test_wbush_perplexity = compute_perplexity(decoder, test_LM_wbush_loader, eval_iters)
+        test_obama_perplexity = compute_perplexity(decoder, test_LM_obama_loader, eval_iters)
+        if epoch % eval_interval == 0:
+            print(f"Epoch {epoch}: Train loss: {train_loss}, Test hbush perplexity: {test_hbush_perplexity}, Test wbush perplexity: {test_wbush_perplexity}, Test obama perplexity: {test_obama_perplexity}")
+    print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
 
 
 
