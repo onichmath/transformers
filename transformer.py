@@ -110,10 +110,8 @@ class MultiHeadAttention(nn.Module):
 
 class FeedForward(nn.Module):
     # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
-    def __init__(self, embed_dim, hidden_dim=None, dropout=0.0):
+    def __init__(self, embed_dim, hidden_dim, dropout=0.0):
         super().__init__()
-        if hidden_dim is None:
-            hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
 
         self.ff_net = nn.Sequential(
             nn.Linear(embed_dim, hidden_dim),
