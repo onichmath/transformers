@@ -97,7 +97,7 @@ class AlibiAttentionHead(nn.Module):
 
         linear_bias = torch.arange(self.block_size).unsqueeze(1) - torch.arange(self.block_size)
         linear_bias = linear_bias - 2 * torch.tril(linear_bias)
-        # linear_bias *= slope_bias
+        linear_bias *= slope_bias
         self.register_buffer("linear_bias", linear_bias)
 
         if self.autoregression:
@@ -118,7 +118,7 @@ class AlibiAttentionHead(nn.Module):
 
         # Compute attention weights
         logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
-        logits += self.linear_bias
+        logits += self.linear_bias[:T, :T]
         # If decoder, mask out future tokens
         if self.autoregression:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
@@ -154,12 +154,13 @@ class MultiHeadAttention(nn.Module):
                                                           autoregression=autoregression,
                                                           dropout=dropout) for _ in range(num_heads)])
         elif attention == "alibi":
+            slope_biases = torch.tensor([2**(i * -8 / num_heads) for i in range(num_heads)], dtype=torch.long)
             self.heads = nn.ModuleList([AlibiAttentionHead(embed_dim=embed_dim,
                                                            block_size=block_size,
                                                            head_dim=self.head_dim,
                                                            autoregression=autoregression,
-                                                           slope_bias=5,
-                                                           dropout=dropout) for _ in range(num_heads)])
+                                                           slope_bias=slope_biases[i],
+                                                           dropout=dropout) for i in range(num_heads)])
         else:
             raise ValueError(f"Unrecognized attention type: {attention}")
 
