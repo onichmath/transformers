@@ -153,6 +153,16 @@ class TransformerBase(nn.Module):
         self.blocks = nn.ModuleList([TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) for _ in range(num_layers)])
         self.layer_norm = nn.LayerNorm(embed_dim)
 
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, nn.Linear):
+            nn.init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+
     def embed(self, x):
         # Return the embeddings for the input sequence
         B, T = x.shape
