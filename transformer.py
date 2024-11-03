@@ -82,6 +82,18 @@ class SelfAttentionHead(nn.Module):
 
         attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
         return attention, weights 
+
+class AlibiAttentionHead(nn.Module):
+    pass
+
+class SparseAttentionHead(nn.Module):
+    pass
+
+class LinformerAttentionHead(nn.Module):
+    pass
+
+class DisentangledAttentionHead(nn.Module):
+    pass
         
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
