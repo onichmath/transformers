@@ -166,19 +166,19 @@ def main():
             num_layers=n_layer,
             dropout=dropout,
             ).to(device)
-    utils = Utilities(tokenizer, classifier)
-    utils.sanity_check("Hello world.", block_size, device)
+    classifier_utils = Utilities(tokenizer, classifier)
+    # classifier_utils.sanity_check("Hello world.", block_size, device)
 
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     # for the classification  task, you will train for a fixed number of epochs like this:
     for epoch in range(epochs_CLS):
+        break
         train_loss, train_accuracy = train_classifier_epoch(classifier, train_CLS_loader, optimizer)
         test_accuracy = compute_classifier_accuracy(classifier, test_CLS_loader)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
-    utils.sanity_check("Hello world.", block_size, device)
-    return
+    # classifier_utils.sanity_check("Hello world.", block_size, device)
 
 
     # Decoder
@@ -199,10 +199,14 @@ def main():
             ).to(device)
     print("Training decoder model ...")
 
+    decoder_utils = Utilities(tokenizer, decoder)
+    decoder_utils.sanity_check("Hello world.", block_size, device)
+
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
     for epoch in range(max_iters):
         train_loss, train_perplexity = train_decoder_epoch(decoder, train_LM_loader, optimizer)
+        decoder_utils.sanity_check("Hello world.", block_size, device)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
         # if epoch % eval_interval == 0:
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")

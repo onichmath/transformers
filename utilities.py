@@ -7,7 +7,7 @@ class Utilities:
         self.tokenizer = tokenizer
         self.model = model
 
-    def sanity_check(self, sentence, block_size, device):
+    def sanity_check(self, sentence, block_size, device, prefix=""):
         # Encode the sentence using the tokenizer
         wordids = self.tokenizer.encode(sentence)
 
@@ -39,10 +39,10 @@ class Utilities:
             cax = ax.imshow(att_map, cmap='hot', interpolation='nearest')
             ax.xaxis.tick_top()  
             fig.colorbar(cax, ax=ax)  
-            plt.title(f"Attention Map {j + 1}")
+            plt.title(f"{prefix} Attention Map {j + 1}")
             
             # Save the plot
-            plt.savefig(f"attention_map_{j + 1}.png")
+            plt.savefig(f"{prefix}_attention_map_{j + 1}.png")
             
             # Show the plot
             plt.show()
