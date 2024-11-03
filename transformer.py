@@ -203,13 +203,34 @@ class LearnedPositionalEncoding(nn.Module):
         B, T = x.shape
         return self.positional_embedding(torch.arange(T, device=x.device))
 
+class SinusoidalPositionalEncoding(nn.Module):
+    def __init__(self, block_size, embed_dim):
+        # Based off implementation of "Attention Is All You Need" at https://github.com/wzlxjtu/PositionalEncoding2D/blob/master/positionalembedding2d.py
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.block_size = block_size
 
+        # Compute the positional encodings once in log space
+        pe = torch.zeros(block_size, embed_dim)
+        position = torch.arange(0, block_size, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embed_dim, 2, dtype=torch.float) * (-torch.log(torch.tensor(10000.0)) / embed_dim))
+
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        
+        self.register_buffer("pe", pe)
+
+    def forward(self, x):
+        pe = x.unsqueeze(-1) + self.pe[:x.size(1),  :].unsqueeze(0)
+        return pe
 
 class TransformerBase(nn.Module):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, dropout=0.0, position_encoding="sinusoidal"):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, position_encoding, dropout=0.0):
         super().__init__()
         if position_encoding == "learned":
             self.position_encoding = LearnedPositionalEncoding(block_size, embed_dim)
+        elif position_encoding == "sinusoidal":
+            self.position_encoding = SinusoidalPositionalEncoding(block_size, embed_dim)
         else:
             self.position_encoding = None
         # Embedding layers
@@ -242,8 +263,8 @@ class TransformerBase(nn.Module):
         return token_embeddings + pos_embeddings
 
 class Encoder(TransformerBase):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, dropout=0.0):
-        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, False, dropout)
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
+        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, False, position_encoding, dropout)
         self.classifier = nn.Linear(embed_dim, 3)
 
     def forward(self, x, y=None):
@@ -263,8 +284,8 @@ class Encoder(TransformerBase):
         return logits, cross_entropy_loss, attention_maps
 
 class Decoder(TransformerBase):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, dropout=0.0):
-        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, True, dropout)
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
+        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, True, position_encoding, dropout)
         self.classifier = nn.Linear(embed_dim, vocab_size)
 
     def forward(self, x, y=None):
