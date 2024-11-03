@@ -78,10 +78,10 @@ class SelfAttentionHead(nn.Module):
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
 
         weights = F.softmax(logits, dim=-1) # B x T x T
-        weights = self.dropout(weights)
+        regularized_weights = self.dropout(weights)
 
-        attention = torch.einsum("btt,btc->btc", weights, value) # B x T x T @ B x T x C -> B x T x C
-        return attention
+        attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
+        return attention, weights 
         
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
@@ -97,9 +97,16 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, x):
         # Multihead attention based off "Attention is All You Need" paper
-        concatenated_attention = torch.cat([head(x) for head in self.heads], dim=-1)
+        attention_maps = []
+        attentions = []
+        for head in self.heads:
+            attention_output, attention_map = head(x)
+            attention_maps.append(attention_map)
+            attentions.append(attention_output)
+
+        concatenated_attention = torch.cat(attentions, dim=-1)
         concatenated_attention = self.dropout(self.proj(concatenated_attention))
-        return concatenated_attention
+        return concatenated_attention, attention_maps
 
 class FeedForward(nn.Module):
     # Feed forward network based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
@@ -130,9 +137,12 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x):
         # Residual connection around each sub-block
-        x = x + self.attention(self.layer_norm1(x))
+        attentions, attention_maps = self.attention(self.layer_norm1(x))
+        with torch.no_grad(): # Discard gradients for the attention maps
+            attention_maps = [attn_map.detach() for attn_map in attention_maps]
+        x = x + attentions
         x = x + self.feed_forward(self.layer_norm2(x))
-        return x
+        return x, attention_maps
 
 class TransformerBase(nn.Module):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, dropout=0.0):
@@ -142,7 +152,7 @@ class TransformerBase(nn.Module):
         self.pos_embedding_table = nn.Embedding(block_size, embed_dim)
 
         # Transformer blocks
-        self.blocks = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) for _ in range(num_layers)])
+        self.blocks = nn.ModuleList([TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) for _ in range(num_layers)])
         self.layer_norm = nn.LayerNorm(embed_dim)
 
     def embed(self, x):
@@ -159,7 +169,11 @@ class Encoder(TransformerBase):
 
     def forward(self, x, y=None):
         x = self.embed(x)
-        x = self.blocks(x)
+        attention_maps = []
+        for block in self.blocks:
+            x, attention_maps = block(x)
+            attention_maps.extend(attention_maps)
+
         x = self.layer_norm(x)
         x = x.mean(dim=1) # Mean across the time dimension
         logits = self.classifier(x)
@@ -167,7 +181,7 @@ class Encoder(TransformerBase):
         cross_entropy_loss = None
         if y is not None:
             cross_entropy_loss = F.cross_entropy(logits, y)
-        return logits, cross_entropy_loss
+        return logits, cross_entropy_loss, attention_maps
 
 class Decoder(TransformerBase):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, dropout=0.0):
@@ -176,11 +190,15 @@ class Decoder(TransformerBase):
 
     def forward(self, x, y=None):
         x = self.embed(x)
-        x = self.blocks(x)
+        attention_maps = []
+        for block in self.blocks:
+            x, attention_maps = block(x)
+            attention_maps.extend(attention_maps)
+
         x = self.layer_norm(x)
         logits = self.classifier(x)
 
         cross_entropy_loss = None
         if y is not None:
             cross_entropy_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
-        return logits, cross_entropy_loss
+        return logits, cross_entropy_loss, attention_maps
