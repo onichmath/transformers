@@ -134,6 +134,24 @@ class TransformerBlock(nn.Module):
         x = x + self.feed_forward(self.layer_norm2(x))
         return x
 
+class TransformerBase(nn.Module):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression=False, dropout=0.0):
+        super().__init__()
+        # Embedding layers
+        self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
+        self.pos_embedding_table = nn.Embedding(block_size, embed_dim)
+
+        # Transformer blocks
+        self.blocks = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) for _ in range(num_layers)])
+        self.layer_norm = nn.LayerNorm(embed_dim)
+
+    def embed(self, x):
+        # Return the embeddings for the input sequence
+        B, T = x.shape
+        token_embeddings = self.token_embedding_table(x)
+        pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device))
+        return token_embeddings + pos_embeddings
+
 class Transformer(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
