@@ -97,7 +97,7 @@ def train_classifier_epoch(classifier, data_loader, optimizer):
     accuracy = correct / len(data_loader.dataset)
     return mean_loss, accuracy
 
-def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
+def compute_perplexity(decoderLMmodel, data_loader, eval_iters=200):
     """ Compute the perplexity of the decoderLMmodel on the data in data_loader.
     Make sure to use the cross entropy loss for the decoderLMmodel.
     """
@@ -143,6 +143,10 @@ def train_decoder_epoch(decoder, data_loader, optimizer):
     mean_loss = train_loss / len(data_loader)
     return mean_loss, perplexity
 
+def read_file(file):
+    with open(file, 'r', encoding='utf-8') as f:
+        return f.read()
+
 def main():
 
     print("Loading data and creating tokenizer ...")
@@ -182,11 +186,8 @@ def main():
 
 
     # Decoder
-    inputfile = "speechesdataset/train_LM.txt"
-    with open(inputfile, 'r', encoding='utf-8') as f:
-        lmtrainText = f.read()
-    train_LM_dataset = LanguageModelingDataset(tokenizer, lmtrainText,  block_size)
-    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, shuffle=True)
+    train_LM_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/train_LM.txt"),  block_size)
+    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
 
     decoder = Decoder(
             vocab_size=tokenizer.vocab_size,
@@ -200,28 +201,31 @@ def main():
     print("Training decoder model ...")
 
     decoder_utils = Utilities(tokenizer, decoder)
-    decoder_utils.sanity_check("Hello world.", block_size, device)
+    # decoder_utils.sanity_check("Hello world.", block_size, device)
 
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
-    for epoch in range(max_iters):
+    for epoch in range(1):
         train_loss, train_perplexity = train_decoder_epoch(decoder, train_LM_loader, optimizer)
-        decoder_utils.sanity_check("Hello world.", block_size, device)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
         # if epoch % eval_interval == 0:
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
 
-    test_LM_hbush_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_hbush.txt", block_size)
-    test_LM_wbush_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_wbush.txt", block_size)
-    test_LM_obama_dataset = LanguageModelingDataset(tokenizer, "speechesdataset/test_LM_obama.txt", block_size)
-    
-    test_LM_hbush_loader = DataLoader(test_LM_hbush_dataset, batch_size=batch_size, shuffle=False)
-    test_LM_wbush_loader = DataLoader(test_LM_wbush_dataset, batch_size=batch_size, shuffle=False)
-    test_LM_obama_loader = DataLoader(test_LM_obama_dataset, batch_size=batch_size, shuffle=False)
+
+    test_LM_hbush_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
+    test_LM_wbush_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
+    test_LM_obama_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/test_LM_hbush.txt"), block_size)
+    # 
+    test_LM_hbush_loader = DataLoader(test_LM_hbush_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
+    test_LM_wbush_loader = DataLoader(test_LM_wbush_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
+    test_LM_obama_loader = DataLoader(test_LM_obama_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
     test_hbush_perplexity = compute_perplexity(decoder, test_LM_hbush_loader, eval_iters)
     test_wbush_perplexity = compute_perplexity(decoder, test_LM_wbush_loader, eval_iters)
     test_obama_perplexity = compute_perplexity(decoder, test_LM_obama_loader, eval_iters)
+    print(f"Test perplexity on hbush: {test_hbush_perplexity}")
+    print(f"Test perplexity on wbush: {test_wbush_perplexity}")
+    print(f"Test perplexity on obama: {test_obama_perplexity}")
 
 
 
