@@ -84,7 +84,47 @@ class SelfAttentionHead(nn.Module):
         return attention, weights 
 
 class AlibiAttentionHead(nn.Module):
-    pass
+    def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
+        super().__init__()
+        self.embed_dim = embed_dim 
+        self.head_dim = head_dim
+        self.block_size = block_size
+        self.autoregression = autoregression
+
+        # Channels x Head size
+        self.query_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
+
+        if self.autoregression:
+            # Buffer instead of parameter
+            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        assert T == self.block_size
+        assert C == self.embed_dim
+
+        # Linearly project queries, keys, and values
+        query = self.query_linear(x) # B x T x C
+        key = self.key_linear(x) # B x T x C
+        value = self.value_linear(x) # B x T x C
+
+        # Compute attention weights
+        # logits = torch.einsum("btc,bcT->btt", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
+        logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
+        logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        # If decoder, mask out future tokens
+        if self.autoregression:
+            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
+
+        weights = F.softmax(logits, dim=-1) # B x T x T
+        regularized_weights = self.dropout(weights)
+
+        attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
+        return attention, weights 
 
 class SparseAttentionHead(nn.Module):
     pass
@@ -154,15 +194,32 @@ class TransformerBlock(nn.Module):
         x = x + self.feed_forward(self.layer_norm2(x))
         return x, attention_maps
 
-class TransformerBase(nn.Module):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, dropout=0.0):
+class LearnedPositionalEncoding(nn.Module):
+    def __init__(self, block_size, embed_dim):
         super().__init__()
+        self.positional_embedding = nn.Embedding(block_size, embed_dim)
+
+    def forward(self, x):
+        B, T = x.shape
+        return self.positional_embedding(torch.arange(T, device=x.device))
+
+
+
+class TransformerBase(nn.Module):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, dropout=0.0, position_encoding="sinusoidal"):
+        super().__init__()
+        if position_encoding == "learned":
+            self.position_encoding = LearnedPositionalEncoding(block_size, embed_dim)
+        else:
+            self.position_encoding = None
         # Embedding layers
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
-        self.pos_embedding_table = nn.Embedding(block_size, embed_dim)
 
         # Transformer blocks
-        self.blocks = nn.ModuleList([TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) for _ in range(num_layers)])
+        self.blocks = nn.ModuleList([
+            TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) 
+            for _ in range(num_layers)
+            ])
         self.layer_norm = nn.LayerNorm(embed_dim)
 
         self.apply(self._init_weights)
@@ -179,7 +236,9 @@ class TransformerBase(nn.Module):
         # Return the embeddings for the input sequence
         B, T = x.shape
         token_embeddings = self.token_embedding_table(x)
-        pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device))
+        if not self.position_encoding:
+            return token_embeddings
+        pos_embeddings = self.position_encoding(x)
         return token_embeddings + pos_embeddings
 
 class Encoder(TransformerBase):
