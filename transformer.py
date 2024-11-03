@@ -161,6 +161,12 @@ class MultiHeadAttention(nn.Module):
                                                            autoregression=autoregression,
                                                            slope_bias=slope_biases[i],
                                                            dropout=dropout) for i in range(num_heads)])
+        elif attention == "sparse":
+            self.heads = nn.ModuleList([SparseAttentionHead(embed_dim=embed_dim,
+                                                            block_size=block_size,
+                                                            head_dim=self.head_dim,
+                                                            autoregression=autoregression,
+                                                            dropout=dropout) for _ in range(num_heads)])
         else:
             raise ValueError(f"Unrecognized attention type: {attention}")
 
@@ -256,6 +262,9 @@ class TransformerBase(nn.Module):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, attention="basic", position_encoding="learned", dropout=0.0):
         super().__init__()
         # Positional encoding
+        if attention == "alibi" and (position_encoding is not None):
+            raise ValueError("Alibi attention does not support positional encoding")
+
         if position_encoding == "learned":
             self.position_encoding = LearnedPositionalEncoding(block_size, embed_dim)
         elif position_encoding == "sinusoidal":
@@ -292,7 +301,7 @@ class TransformerBase(nn.Module):
         return token_embeddings + pos_embeddings
 
 class Encoder(TransformerBase):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, attention="basic", position_encoding="learned", dropout=0.0):
         super().__init__(vocab_size=vocab_size,
                          embed_dim=embed_dim,
                          block_size=block_size,
@@ -300,6 +309,7 @@ class Encoder(TransformerBase):
                          num_layers=num_layers,
                          hidden_dim=hidden_dim,
                          autoregression=False,
+                         attention=attention,
                          position_encoding=position_encoding,
                          dropout=dropout)
         self.classifier = nn.Linear(embed_dim, 3)
@@ -308,8 +318,8 @@ class Encoder(TransformerBase):
         x = self.embed(x)
         attention_maps = []
         for block in self.blocks:
-            x, attention_maps = block(x)
-            attention_maps.extend(attention_maps)
+            x, maps = block(x)
+            attention_maps.extend(maps)
 
         x = self.layer_norm(x)
         x = x.mean(dim=1) # Mean across the time dimension
@@ -330,7 +340,7 @@ class Decoder(TransformerBase):
                          hidden_dim=hidden_dim,
                          autoregression=True,
                          position_encoding=position_encoding,
-                         attention="alibi",
+                         attention=attention,
                          dropout=dropout)
         self.classifier = nn.Linear(embed_dim, vocab_size)
 
@@ -338,8 +348,8 @@ class Decoder(TransformerBase):
         x = self.embed(x)
         attention_maps = []
         for block in self.blocks:
-            x, attention_maps = block(x)
-            attention_maps.extend(attention_maps)
+            x, maps = block(x)
+            attention_maps.extend(maps)
 
         x = self.layer_norm(x)
         logits = self.classifier(x)
