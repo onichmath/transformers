@@ -84,7 +84,7 @@ class SelfAttentionHead(nn.Module):
         return attention, weights 
 
 class AlibiAttentionHead(nn.Module):
-    def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
+    def __init__(self, embed_dim, block_size, head_dim, autoregression, slope_bias, dropout):
         super().__init__()
         self.embed_dim = embed_dim 
         self.head_dim = head_dim
@@ -98,6 +98,9 @@ class AlibiAttentionHead(nn.Module):
 
         if self.autoregression:
             # Buffer instead of parameter
+            lower_triangular_matrix = torch.tril(torch.arange(self.bloac_size).unsqueeze(1) - torch.arange(self.block_size), diagonal=-1)
+            print(lower_triangular_matrix)
+            exit()
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
 
         self.dropout = nn.Dropout(dropout)
@@ -115,7 +118,6 @@ class AlibiAttentionHead(nn.Module):
         # Compute attention weights
         # logits = torch.einsum("btc,bcT->btt", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
         logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
-        logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
         # If decoder, mask out future tokens
         if self.autoregression:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
@@ -138,12 +140,27 @@ class DisentangledAttentionHead(nn.Module):
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
-    def __init__(self, num_heads, embed_dim, block_size, autoregression, dropout=0.0):
+    def __init__(self, num_heads, embed_dim, block_size, autoregression, attention, dropout=0.0):
         super().__init__()
         assert embed_dim % num_heads == 0
         self.head_dim = embed_dim // num_heads
 
-        self.heads = nn.ModuleList([SelfAttentionHead(embed_dim, block_size, self.head_dim, autoregression, dropout) for _ in range(num_heads)])
+        # TODO: Here get slopes for each head
+        if attention == "basic":
+            self.heads = nn.ModuleList([SelfAttentionHead(embed_dim=embed_dim,
+                                                          block_size=block_size,
+                                                          head_dim=self.head_dim,
+                                                          autoregression=autoregression,
+                                                          dropout=dropout) for _ in range(num_heads)])
+        elif attention == "alibi":
+            self.heads = nn.ModuleList([AlibiAttentionHead(embed_dim=embed_dim,
+                                                           block_size=block_size,
+                                                           head_dim=self.head_dim,
+                                                           autoregression=autoregression,
+                                                           slope_bias=5,
+                                                           dropout=dropout) for _ in range(num_heads)])
+        else:
+            raise ValueError(f"Unrecognized attention type: {attention}")
         self.proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -177,10 +194,18 @@ class FeedForward(nn.Module):
 
 class TransformerBlock(nn.Module):
     # Single transformer block based off "Attention is All You Need" paper
-    def __init__(self, embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout=0.0):
+    def __init__(self, embed_dim, num_heads, block_size, hidden_dim, autoregression, attention, dropout=0.0):
         super().__init__()
-        self.attention = MultiHeadAttention(num_heads, embed_dim, block_size, autoregression, dropout)
-        self.feed_forward = FeedForward(embed_dim, hidden_dim, dropout)
+        self.attention = MultiHeadAttention(num_heads=num_heads, 
+                                            embed_dim=embed_dim, 
+                                            block_size=block_size, 
+                                            autoregression=autoregression, 
+                                            attention=attention, 
+                                            dropout=dropout)
+
+        self.feed_forward = FeedForward(embed_dim=embed_dim, 
+                                        hidden_dim=hidden_dim, 
+                                        dropout=dropout)
 
         self.layer_norm1 = nn.LayerNorm(embed_dim) # Pre-normalization
         self.layer_norm2 = nn.LayerNorm(embed_dim)
@@ -205,7 +230,7 @@ class LearnedPositionalEncoding(nn.Module):
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, block_size, embed_dim):
-        # Based off implementation of "Attention Is All You Need" at https://github.com/wzlxjtu/PositionalEncoding2D/blob/master/positionalembedding2d.py
+        # Based off implementation of "Attention Is All You Need" position encodings at https://github.com/wzlxjtu/PositionalEncoding2D/blob/master/positionalembedding2d.py
         super().__init__()
         self.embed_dim = embed_dim
         self.block_size = block_size
@@ -225,20 +250,21 @@ class SinusoidalPositionalEncoding(nn.Module):
         return pe
 
 class TransformerBase(nn.Module):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, position_encoding, dropout=0.0):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, attention="basic", position_encoding="learned", dropout=0.0):
         super().__init__()
+        # Positional encoding
         if position_encoding == "learned":
             self.position_encoding = LearnedPositionalEncoding(block_size, embed_dim)
         elif position_encoding == "sinusoidal":
             self.position_encoding = SinusoidalPositionalEncoding(block_size, embed_dim)
         else:
             self.position_encoding = None
-        # Embedding layers
+
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
 
         # Transformer blocks
         self.blocks = nn.ModuleList([
-            TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, dropout) 
+            TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, autoregression, attention, dropout) 
             for _ in range(num_layers)
             ])
         self.layer_norm = nn.LayerNorm(embed_dim)
@@ -264,7 +290,15 @@ class TransformerBase(nn.Module):
 
 class Encoder(TransformerBase):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
-        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, False, position_encoding, dropout)
+        super().__init__(vocab_size=vocab_size,
+                         embed_dim=embed_dim,
+                         block_size=block_size,
+                         num_heads=num_heads,
+                         num_layers=num_layers,
+                         hidden_dim=hidden_dim,
+                         autoregression=False,
+                         position_encoding=position_encoding,
+                         dropout=dropout)
         self.classifier = nn.Linear(embed_dim, 3)
 
     def forward(self, x, y=None):
@@ -285,7 +319,15 @@ class Encoder(TransformerBase):
 
 class Decoder(TransformerBase):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
-        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, True, position_encoding, dropout)
+        super().__init__(vocab_size=vocab_size,
+                         embed_dim=embed_dim,
+                         block_size=block_size,
+                         num_heads=num_heads,
+                         num_layers=num_layers,
+                         hidden_dim=hidden_dim,
+                         autoregression=True,
+                         position_encoding=position_encoding,
+                         dropout=dropout)
         self.classifier = nn.Linear(embed_dim, vocab_size)
 
     def forward(self, x, y=None):
