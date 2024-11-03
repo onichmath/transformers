@@ -138,7 +138,7 @@ class Transformer(nn.Module):
     # Batch x Time x Channel 
     # logs.shape = B x T x C
     # crossentropyLoss needs B x C x T
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim=None, is_decoder=False, output=3, dropout=0.0):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim=None, is_decoder=False, output_size=3, dropout=0.0):
         super().__init__()
         if not hidden_dim:
             hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
@@ -152,7 +152,7 @@ class Transformer(nn.Module):
         if is_decoder:
             self.classifier = nn.Linear(embed_dim, vocab_size)
         else:
-            self.classifier = nn.Linear(embed_dim, output)
+            self.classifier = nn.Linear(embed_dim, output_size)
 
     def forward(self, x, y=None):
         # Based loosely off of the transformer architecture from the Attention is All You Need paper
