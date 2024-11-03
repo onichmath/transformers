@@ -119,8 +119,26 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     return perplexity
 
 def train_decoder_epoch(decoder, data_loader, optimizer):
-    """ Train the decoder on the data in data_loader for the specified number of iterations."""
-    pass
+    """ Train the decoder on the data in data_loader and return mean_loss"""
+    decoder.train()
+    # losses = []
+    train_loss = 0
+    for batch, (X, y) in enumerate(data_loader):
+        X, y = X.to(device), y.to(device)
+
+        _, loss = decoder(X, y)
+        # losses.append(loss.item())
+        train_loss += loss.item()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    # losses = torch.tensor(losses)
+    # mean_loss = losses.mean()
+    # perplexity = torch.exp(mean_loss).item()
+    mean_loss = train_loss / len(data_loader)
+    return mean_loss#, perplexity
 
 def main():
 
@@ -148,6 +166,7 @@ def main():
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     # for the classification  task, you will train for a fixed number of epochs like this:
     for epoch in range(epochs_CLS):
+        break
         train_loss, train_accuracy = train_classifier_epoch(classifier, train_CLS_loader, optimizer)
         test_accuracy = compute_classifier_accuracy(classifier, test_CLS_loader)
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
@@ -181,7 +200,7 @@ def main():
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
     for epoch in range(max_iters):
-        train_loss, train_accuracy = train_decoder_epoch(decoder, train_LM_loader, optimizer)
+        train_loss = train_decoder_epoch(decoder, train_LM_loader, optimizer)
         test_hbush_perplexity = compute_perplexity(decoder, test_LM_hbush_loader, eval_iters)
         test_wbush_perplexity = compute_perplexity(decoder, test_LM_wbush_loader, eval_iters)
         test_obama_perplexity = compute_perplexity(decoder, test_LM_obama_loader, eval_iters)
