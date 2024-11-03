@@ -70,7 +70,6 @@ class SelfAttentionHead(nn.Module):
         value = self.value_linear(x) # B x T x C
 
         # Compute attention weights
-        # logits = torch.einsum("btc,bcT->btt", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
         logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
         # If decoder, mask out future tokens
@@ -96,11 +95,13 @@ class AlibiAttentionHead(nn.Module):
         self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
         self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
 
+        linear_bias = torch.arange(self.block_size).unsqueeze(1) - torch.arange(self.block_size)
+        linear_bias = linear_bias - 2 * torch.tril(linear_bias)
+        # linear_bias *= slope_bias
+        self.register_buffer("linear_bias", linear_bias)
+
         if self.autoregression:
             # Buffer instead of parameter
-            lower_triangular_matrix = torch.tril(torch.arange(self.bloac_size).unsqueeze(1) - torch.arange(self.block_size), diagonal=-1)
-            print(lower_triangular_matrix)
-            exit()
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
 
         self.dropout = nn.Dropout(dropout)
@@ -116,8 +117,8 @@ class AlibiAttentionHead(nn.Module):
         value = self.value_linear(x) # B x T x C
 
         # Compute attention weights
-        # logits = torch.einsum("btc,bcT->btt", query, key.transpose(-1, -2)) # B x T x C @ B x C x T -> B x T x T
         logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
+        logits += self.linear_bias
         # If decoder, mask out future tokens
         if self.autoregression:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
@@ -161,6 +162,7 @@ class MultiHeadAttention(nn.Module):
                                                            dropout=dropout) for _ in range(num_heads)])
         else:
             raise ValueError(f"Unrecognized attention type: {attention}")
+
         self.proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
 
@@ -318,7 +320,7 @@ class Encoder(TransformerBase):
         return logits, cross_entropy_loss, attention_maps
 
 class Decoder(TransformerBase):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, position_encoding="learned", dropout=0.0):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, attention="basic", position_encoding="learned", dropout=0.0):
         super().__init__(vocab_size=vocab_size,
                          embed_dim=embed_dim,
                          block_size=block_size,
@@ -327,6 +329,7 @@ class Decoder(TransformerBase):
                          hidden_dim=hidden_dim,
                          autoregression=True,
                          position_encoding=position_encoding,
+                         attention="alibi",
                          dropout=dropout)
         self.classifier = nn.Linear(embed_dim, vocab_size)
 
