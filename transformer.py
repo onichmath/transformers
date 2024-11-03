@@ -53,7 +53,7 @@ class SelfAttentionHead(nn.Module):
         self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
         self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
 
-        if self.is_decoder:
+        if self.autoregression:
             # Buffer instead of parameter
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
 
@@ -135,7 +135,7 @@ class TransformerBlock(nn.Module):
         return x
 
 class TransformerBase(nn.Module):
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression=False, dropout=0.0):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, autoregression, dropout=0.0):
         super().__init__()
         # Embedding layers
         self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
@@ -152,33 +152,13 @@ class TransformerBase(nn.Module):
         pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device))
         return token_embeddings + pos_embeddings
 
-class Transformer(nn.Module):
-    # Batch x Time x Channel 
-    # logs.shape = B x T x C
-    # crossentropyLoss needs B x C x T
-    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim=None, is_decoder=False, output_size=3, dropout=0.0):
-        super().__init__()
-        if not hidden_dim:
-            hidden_dim = embed_dim * 4 # 4x embed based off "Attention is All You Need" paper
-
-        self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
-        self.pos_embedding_table = nn.Embedding(block_size, embed_dim) # TODO: change to absolute position embedding
-
-        self.blocks = nn.Sequential(*[TransformerBlock(embed_dim, num_heads, block_size, hidden_dim, is_decoder, dropout) for _ in range(num_layers)])
-        self.layer_norm = nn.LayerNorm(embed_dim)
-
-        if is_decoder:
-            self.classifier = nn.Linear(embed_dim, vocab_size)
-        else:
-            self.classifier = nn.Linear(embed_dim, output_size)
+class Encoder(TransformerBase):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, dropout=0.0):
+        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, False, dropout)
+        self.classifier = nn.Linear(embed_dim, 3)
 
     def forward(self, x, y=None):
-        # Based loosely off of the transformer architecture from the Attention is All You Need paper
-        # Combined with the implementation of "Let's Build GPT: from scratch, in code, spelled out"
-        B, T = x.shape
-        token_embeddings = self.token_embedding_table(x) # B x T x C
-        pos_embeddings = self.pos_embedding_table(torch.arange(T, device=x.device)) # T x C
-        x = token_embeddings + pos_embeddings
+        x = self.embed(x)
         x = self.blocks(x)
         x = self.layer_norm(x)
         x = x.mean(dim=1) # Mean across the time dimension
@@ -186,9 +166,5 @@ class Transformer(nn.Module):
 
         cross_entropy_loss = None
         if y is not None:
-            B, C = logits.shape
             cross_entropy_loss = F.cross_entropy(logits, y)
-
         return logits, cross_entropy_loss
-
-

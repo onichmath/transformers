@@ -5,7 +5,7 @@ import os
 
 from tokenizer import SimpleTokenizer
 from dataset import SpeechesClassificationDataset, LanguageModelingDataset
-from transformer import Transformer
+from transformer import Encoder
 
 
 seed = 42
@@ -153,14 +153,14 @@ def main():
     test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/test_CLS.tsv")
     test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
 
-    classifier = Transformer(
+    classifier = Encoder(
             vocab_size=tokenizer.vocab_size,
             embed_dim=n_embd,
             block_size=block_size,
+            hidden_dim=n_embd * 4, # 4x embed based off "Attention is All You Need" paper
             num_heads=n_head,
             num_layers=n_layer,
             dropout=dropout,
-            output_size=n_output
             ).to(device)
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
@@ -172,6 +172,7 @@ def main():
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
 
+    return 
     inputfile = "speechesdataset/train_LM.txt"
     with open(inputfile, 'r', encoding='utf-8') as f:
         lmtrainText = f.read()
