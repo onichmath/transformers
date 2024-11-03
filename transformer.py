@@ -168,3 +168,19 @@ class Encoder(TransformerBase):
         if y is not None:
             cross_entropy_loss = F.cross_entropy(logits, y)
         return logits, cross_entropy_loss
+
+class Decoder(TransformerBase):
+    def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, dropout=0.0):
+        super().__init__(vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, True, dropout)
+        self.classifier = nn.Linear(embed_dim, vocab_size)
+
+    def forward(self, x, y=None):
+        x = self.embed(x)
+        x = self.blocks(x)
+        x = self.layer_norm(x)
+        logits = self.classifier(x)
+
+        cross_entropy_loss = None
+        if y is not None:
+            cross_entropy_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
+        return logits, cross_entropy_loss
