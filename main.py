@@ -5,7 +5,7 @@ import os
 
 from tokenizer import SimpleTokenizer
 from dataset import SpeechesClassificationDataset, LanguageModelingDataset
-from transformer import Encoder
+from transformer import Decoder, Encoder
 
 
 seed = 42
@@ -81,12 +81,12 @@ def train_classifier_epoch(classifier, data_loader, optimizer):
     """ Train the classifier on the data in data_loader for the specified number of epochs."""
     classifier.train()
     train_loss, correct = 0, 0
-    for batch, (X, y) in enumerate(data_loader):
-        X, y = X.to(device), y.to(device)
+    for batch, (X, Y) in enumerate(data_loader):
+        X, Y = X.to(device), Y.to(device)
 
-        preds, loss = classifier(X, y)
+        preds, loss = classifier(X, Y)
         train_loss += loss.item()
-        correct += (preds.argmax(1) == y).type(torch.float).sum().item() # From hw1
+        correct += (preds.argmax(1) == Y).type(torch.float).sum().item() # From hw1
 
         optimizer.zero_grad()
         loss.backward()
@@ -103,7 +103,7 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=100):
     decoderLMmodel.eval()
     losses= []
     total_loss = 0
-    for X, Y in data_loader:
+    for batch, (X, Y) in enumerate(data_loader):
         X, Y = X.to(device), Y.to(device)
         _, loss = decoderLMmodel(X, Y) # your model should be computing the cross entropy loss
         losses.append(loss.item())
@@ -123,10 +123,10 @@ def train_decoder_epoch(decoder, data_loader, optimizer):
     decoder.train()
     # losses = []
     train_loss = 0
-    for batch, (X, y) in enumerate(data_loader):
-        X, y = X.to(device), y.to(device)
+    for batch, (X, Y) in enumerate(data_loader):
+        X, Y = X.to(device), Y.to(device)
 
-        _, loss = decoder(X, y)
+        _, loss = decoder(X, Y)
         # losses.append(loss.item())
         train_loss += loss.item()
 
@@ -172,7 +172,6 @@ def main():
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
 
-    return 
     inputfile = "speechesdataset/train_LM.txt"
     with open(inputfile, 'r', encoding='utf-8') as f:
         lmtrainText = f.read()
@@ -186,8 +185,9 @@ def main():
     test_LM_hbush_loader = DataLoader(test_LM_hbush_dataset, batch_size=batch_size, shuffle=False)
     test_LM_wbush_loader = DataLoader(test_LM_wbush_dataset, batch_size=batch_size, shuffle=False)
     test_LM_obama_loader = DataLoader(test_LM_obama_dataset, batch_size=batch_size, shuffle=False)
+    print("Creating decoder model ...")
 
-    decoder = Transformer(
+    decoder = Decoder(
             vocab_size=tokenizer.vocab_size,
             embed_dim=n_embd,
             block_size=block_size,
@@ -195,13 +195,15 @@ def main():
             hidden_dim=n_hidden,
             num_layers=n_layer,
             dropout=dropout,
-            is_decoder=True
             ).to(device)
+    print("Training decoder model ...")
 
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
     for epoch in range(max_iters):
+        print(f"Epoch {epoch}")
         train_loss = train_decoder_epoch(decoder, train_LM_loader, optimizer)
+        print(f"Epoch {epoch}: Train loss: {train_loss}")
         test_hbush_perplexity = compute_perplexity(decoder, test_LM_hbush_loader, eval_iters)
         test_wbush_perplexity = compute_perplexity(decoder, test_LM_wbush_loader, eval_iters)
         test_obama_perplexity = compute_perplexity(decoder, test_LM_obama_loader, eval_iters)
