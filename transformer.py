@@ -61,7 +61,7 @@ class SelfAttentionBase(nn.Module):
         assert C == self.embed_dim
         return B, T, C
 
-    def get_linear_attention_components(self, x):
+    def project_linear_components(self, x):
         # Get the linearly projected queries, keys, and values
         query = self.query_linear(x)
         key = self.key_linear(x)
@@ -73,6 +73,12 @@ class SelfAttentionBase(nn.Module):
         if self.autoregression:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf"))
         return logits
+
+    def compute_attention(self, logits, value):
+        weights = F.softmax(logits, dim=-1)
+        regularized_weights = self.dropout(weights)
+        attention = torch.einsum("btt,btc->btc", regularized_weights, value)
+        return attention, weights
 
 
 class SelfAttentionHead(nn.Module):
@@ -87,7 +93,7 @@ class SelfAttentionHead(nn.Module):
 
     def forward(self, x):
         B, T, C = self.get_sizes(x)
-        q, k, v = self.get_linear_attention_components(x)
+        q, k, v = self.get_linear_projections(x)
 
         # Compute attention weights
         logits = torch.einsum("btc,bTc->bTt", q, k) # B x T x C @ B x T x C -> B x T x T
