@@ -186,40 +186,32 @@ class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads, embed_dim, block_size, autoregression, attention, dropout=0.0):
         super().__init__()
         assert embed_dim % num_heads == 0
-        self.head_dim = embed_dim // num_heads
-
-        # TODO: Here get slopes for each head
-        if attention == "basic":
-            self.heads = nn.ModuleList([SelfAttentionHead(embed_dim=embed_dim,
-                                                          block_size=block_size,
-                                                          head_dim=self.head_dim,
-                                                          autoregression=autoregression,
-                                                          dropout=dropout) for _ in range(num_heads)])
-        elif attention == "alibi":
-            slope_biases = torch.tensor([2**(i * -8 / num_heads) for i in range(num_heads)], dtype=torch.float)
-            self.heads = nn.ModuleList([AlibiAttentionHead(embed_dim=embed_dim,
-                                                           block_size=block_size,
-                                                           head_dim=self.head_dim,
-                                                           autoregression=autoregression,
-                                                           slope_bias=slope_biases[i],
-                                                           dropout=dropout) for i in range(num_heads)])
-        elif attention == "bigbird":
-            self.heads = nn.ModuleList([BasicBigBirdAttentionHead(embed_dim=embed_dim,
-                                                                 block_size=block_size,
-                                                                 head_dim=self.head_dim,
-                                                                 autoregression=autoregression,
-                                                                 dropout=dropout) for _ in range(num_heads)])
-        elif attention == "sparse":
-            self.heads = nn.ModuleList([SparseAttentionHead(embed_dim=embed_dim,
-                                                            block_size=block_size,
-                                                            head_dim=self.head_dim,
-                                                            autoregression=autoregression,
-                                                            dropout=dropout) for _ in range(num_heads)])
-        else:
-            raise ValueError(f"Unrecognized attention type: {attention}")
+        self._init_heads(num_heads, embed_dim, block_size, autoregression, attention, dropout)
 
         self.proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
+    
+    def _init_heads(self, num_heads, embed_dim, block_size, autoregression, attention, dropout):
+        head_dim = embed_dim // num_heads
+        params = {
+            "embed_dim": embed_dim,
+            "block_size": block_size,
+            "head_dim": head_dim,
+            "autoregression": autoregression,
+            "dropout": dropout
+            }
+        if attention == "basic":
+            self.heads = nn.ModuleList([SelfAttentionHead(**params) for _ in range(num_heads)])
+        elif attention == "alibi":
+            slope_biases = torch.tensor([2**(i * -8 / num_heads) for i in range(num_heads)], dtype=torch.float)
+            self.heads = nn.ModuleList([AlibiAttentionHead(slope_bias=slope_biases[i], **params) for i in range(num_heads)])
+        elif attention == "bigbird":
+            self.heads = nn.ModuleList([BasicBigBirdAttentionHead(**params) for _ in range(num_heads)])
+        elif attention == "sparse":
+            self.heads = nn.ModuleList([SparseAttentionHead(**params) for _ in range(num_heads)])
+        else:
+            raise ValueError(f"Unrecognized attention type: {attention}")
+
 
     def forward(self, x):
         # Multihead attention based off "Attention is All You Need" paper
