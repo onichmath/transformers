@@ -55,12 +55,14 @@ class SelfAttentionBase(nn.Module):
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
         self.dropout = nn.Dropout(dropout)
 
-    def get_linear_attention_components(self, x):
-        # Get the linearly projected queries, keys, and values
+    def get_shape(self, x):
         B, T, C = x.shape
         assert T == self.block_size
         assert C == self.embed_dim
+        return B, T, C
 
+    def get_linear_attention_components(self, x):
+        # Get the linearly projected queries, keys, and values
         query = self.query_linear(x)
         key = self.key_linear(x)
         value = self.value_linear(x)
@@ -77,35 +79,18 @@ class SelfAttentionHead(nn.Module):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
     def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
-        super().__init__()
-        self.embed_dim = embed_dim 
-        self.head_dim = head_dim
-        self.block_size = block_size
-        self.autoregression = autoregression
-
-        # Channels x Head size
-        self.query_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
-        self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
-        self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
-
-        if self.autoregression:
-            # Buffer instead of parameter
-            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
-
-        self.dropout = nn.Dropout(dropout)
+        super().__init__(embed_dim=embed_dim, 
+                         block_size=block_size, 
+                         head_dim=head_dim, 
+                         autoregression=autoregression, 
+                         dropout=dropout)
 
     def forward(self, x):
-        B, T, C = x.shape
-        assert T == self.block_size
-        assert C == self.embed_dim
-
-        # Linearly project queries, keys, and values
-        query = self.query_linear(x) # B x T x C
-        key = self.key_linear(x) # B x T x C
-        value = self.value_linear(x) # B x T x C
+        B, T, C = self.get_sizes(x)
+        q, k, v = self.get_linear_attention_components(x)
 
         # Compute attention weights
-        logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
+        logits = torch.einsum("btc,bTc->bTt", q, k) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
         # If decoder, mask out future tokens
         if self.autoregression:
@@ -114,7 +99,7 @@ class SelfAttentionHead(nn.Module):
         weights = F.softmax(logits, dim=-1) # B x T x T
         regularized_weights = self.dropout(weights)
 
-        attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
+        attention = torch.einsum("btt,btc->btc", regularized_weights, v) # B x T x T @ B x T x C -> B x T x C
         return attention, weights 
 
 class AlibiAttentionHead(nn.Module):
