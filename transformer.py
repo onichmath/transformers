@@ -133,25 +133,14 @@ class AlibiAttentionHead(nn.Module):
 
 class BasicBigBirdAttentionHead(nn.Module):
     def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
-        super().__init__()
-        self.embed_dim = embed_dim 
-        self.head_dim = head_dim
-        self.block_size = block_size
-        self.autoregression = autoregression
-
-        # Channels x Head size
-        self.query_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
-        self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
-        self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
+        super().__init__(embed_dim=embed_dim,
+                         block_size=block_size,
+                         head_dim=head_dim,
+                         autoregression=autoregression,
+                         dropout=dropout)
 
         big_bird_mask = self.create_big_bird_mask(self.block_size, self.block_size // 16, self.block_size // 8, self.block_size // 16)
         self.register_buffer("attention_mask", big_bird_mask)
-
-        if self.autoregression:
-            # Buffer instead of parameter
-            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
-
-        self.dropout = nn.Dropout(dropout)
 
     def create_big_bird_mask(self, block_size, num_global, num_local, num_random):
         mask = torch.zeros(block_size, block_size)
@@ -169,27 +158,16 @@ class BasicBigBirdAttentionHead(nn.Module):
         return mask
 
     def forward(self, x):
-        B, T, C = x.shape
-        assert T == self.block_size
-        assert C == self.embed_dim
-
-        # Linearly project queries, keys, and values
-        query = self.query_linear(x) # B x T x C
-        key = self.key_linear(x) # B x T x C
-        value = self.value_linear(x) # B x T x C
+        B, T, C = self.get_shape(x)
+        q, k, v = self.project_linear_components(x)
 
         # Compute attention weights
-        logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
+        logits = torch.einsum("btc,bTc->bTt", q, k) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
         logits = logits.masked_fill(self.attention_mask == 0, float("-inf")) # Mask out attention weights
-        # If decoder, mask out future tokens
-        if self.autoregression:
-            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
+        logits = self.mask_causal_logits(logits, T)
 
-        weights = F.softmax(logits, dim=-1) # B x T x T
-        regularized_weights = self.dropout(weights)
-
-        attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
+        attention, weights = self.compute_attention(logits, v)
         return attention, weights 
 
 
