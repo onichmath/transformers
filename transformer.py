@@ -38,6 +38,41 @@ Encoder should output sequence of embeddings for each word in input sequence
 """
 # Encoder self attention attends to all tokens
 # Decoder self attention attends autoregressively to all tokens before the current token
+class SelfAttentionBase(nn.Module):
+    def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
+        super().__init__()
+        self.embed_dim = embed_dim 
+        self.head_dim = head_dim
+        self.block_size = block_size
+        self.autoregression = autoregression
+
+        # Channels x Head size
+        self.query_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+
+        if self.autoregression:
+            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
+        self.dropout = nn.Dropout(dropout)
+
+    def get_linear_attention_components(self, x):
+        # Get the linearly projected queries, keys, and values
+        B, T, C = x.shape
+        assert T == self.block_size
+        assert C == self.embed_dim
+
+        query = self.query_linear(x)
+        key = self.key_linear(x)
+        value = self.value_linear(x)
+        return query, key, value
+
+    def mask_logits(self, logits, T):
+        # Mask out future tokens if decoder
+        if self.autoregression:
+            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf"))
+        return logits
+
+
 class SelfAttentionHead(nn.Module):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
