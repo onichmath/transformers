@@ -342,8 +342,16 @@ class TransformerBase(nn.Module):
 
 class Encoder(TransformerBase):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, attention="basic", position_encoding="learned", dropout=0.0):
-        transformer_params = {k:v for k, v in locals().items() if k not in ["self", "__class__"]}
-        super().__init__(**transformer_params, autoregression=False)
+        super().__init__(vocab_size=vocab_size,
+                         embed_dim=embed_dim,
+                         block_size=block_size,
+                         num_heads=num_heads,
+                         num_layers=num_layers,
+                         hidden_dim=hidden_dim,
+                         autoregression=False,
+                         attention=attention,
+                         position_encoding=position_encoding,
+                         dropout=dropout)
         self.classifier = nn.Linear(embed_dim, 3)
 
     def forward(self, x, y=None):
@@ -364,8 +372,16 @@ class Encoder(TransformerBase):
 
 class Decoder(TransformerBase):
     def __init__(self, vocab_size, embed_dim, block_size, num_heads, num_layers, hidden_dim, attention="basic", position_encoding="learned", dropout=0.0):
-        transformer_params = {k:v for k, v in locals().items() if k not in ["self", "__class__"]}
-        super().__init__(**transformer_params, autoregression=True)
+        super().__init__(vocab_size=vocab_size,
+                         embed_dim=embed_dim,
+                         block_size=block_size,
+                         num_heads=num_heads,
+                         num_layers=num_layers,
+                         hidden_dim=hidden_dim,
+                         autoregression=True,
+                         position_encoding=position_encoding,
+                         attention=attention,
+                         dropout=dropout)
         self.classifier = nn.Linear(embed_dim, vocab_size)
 
     def forward(self, x, y=None):
