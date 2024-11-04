@@ -143,6 +143,7 @@ class BasicBigBirdAttentionHead(nn.Module):
         self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
 
         big_bird_mask = self.create_big_bird_mask(self.block_size, self.block_size // 16, self.block_size // 8, self.block_size // 16)
+        self.register_buffer("attention_mask", big_bird_mask)
 
         if self.autoregression:
             # Buffer instead of parameter
@@ -165,7 +166,6 @@ class BasicBigBirdAttentionHead(nn.Module):
             mask[i, random_indices] = 1
         return mask
 
-
     def forward(self, x):
         B, T, C = x.shape
         assert T == self.block_size
@@ -179,6 +179,7 @@ class BasicBigBirdAttentionHead(nn.Module):
         # Compute attention weights
         logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        logits = logits.masked_fill(self.attention_mask == 0, float("-inf")) # Mask out attention weights
         # If decoder, mask out future tokens
         if self.autoregression:
             logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
@@ -188,9 +189,6 @@ class BasicBigBirdAttentionHead(nn.Module):
 
         attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
         return attention, weights 
-
-
-
 
 
 class SparseAttentionHead(nn.Module):
