@@ -81,7 +81,7 @@ class SelfAttentionBase(nn.Module):
         return attention, weights
 
 
-class SelfAttentionHead(nn.Module):
+class SelfAttentionHead(SelfAttentionBase):
     # Single head of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
     # and the "Attention is All You Need" paper
     def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
@@ -105,7 +105,7 @@ class SelfAttentionHead(nn.Module):
 
         return attention, weights 
 
-class AlibiAttentionHead(nn.Module):
+class AlibiAttentionHead(SelfAttentionBase):
     def __init__(self, embed_dim, block_size, head_dim, autoregression, slope_bias, dropout):
         super().__init__(embed_dim=embed_dim,
                          block_size=block_size,
@@ -131,7 +131,7 @@ class AlibiAttentionHead(nn.Module):
         attention, weights = self.compute_attention(logits, v)
         return attention, weights 
 
-class BasicBigBirdAttentionHead(nn.Module):
+class BasicBigBirdAttentionHead(SelfAttentionBase):
     def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
         super().__init__(embed_dim=embed_dim,
                          block_size=block_size,
