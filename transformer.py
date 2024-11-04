@@ -95,8 +95,8 @@ class AlibiAttentionHead(nn.Module):
         self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
         self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
 
-        linear_bias = torch.arange(self.block_size).unsqueeze(1) - torch.arange(self.block_size)
-        linear_bias = linear_bias - 2 * torch.tril(linear_bias)
+        linear_bias = torch.arange(self.block_size).float().unsqueeze(1) - torch.arange(self.block_size).float()
+        linear_bias = linear_bias - 2 * torch.tril(linear_bias).float()
         linear_bias *= slope_bias
         self.register_buffer("linear_bias", linear_bias)
 
@@ -129,6 +129,52 @@ class AlibiAttentionHead(nn.Module):
         attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
         return attention, weights 
 
+class BasicBigBirdAttentionHead(nn.Module):
+    def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
+        super().__init__()
+        self.embed_dim = embed_dim 
+        self.head_dim = head_dim
+        self.block_size = block_size
+        self.autoregression = autoregression
+
+        # Channels x Head size
+        self.query_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
+        self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
+
+        if self.autoregression:
+            # Buffer instead of parameter
+            self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        assert T == self.block_size
+        assert C == self.embed_dim
+
+        # Linearly project queries, keys, and values
+        query = self.query_linear(x) # B x T x C
+        key = self.key_linear(x) # B x T x C
+        value = self.value_linear(x) # B x T x C
+
+        # Compute attention weights
+        logits = torch.einsum("btc,bTc->bTt", query, key) # B x T x C @ B x T x C -> B x T x T
+        logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        # If decoder, mask out future tokens
+        if self.autoregression:
+            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
+
+        weights = F.softmax(logits, dim=-1) # B x T x T
+        regularized_weights = self.dropout(weights)
+
+        attention = torch.einsum("btt,btc->btc", regularized_weights, value) # B x T x T @ B x T x C -> B x T x C
+        return attention, weights 
+
+
+
+
+
 class SparseAttentionHead(nn.Module):
     pass
 
@@ -154,7 +200,7 @@ class MultiHeadAttention(nn.Module):
                                                           autoregression=autoregression,
                                                           dropout=dropout) for _ in range(num_heads)])
         elif attention == "alibi":
-            slope_biases = torch.tensor([2**(i * -8 / num_heads) for i in range(num_heads)], dtype=torch.long)
+            slope_biases = torch.tensor([2**(i * -8 / num_heads) for i in range(num_heads)], dtype=torch.float)
             self.heads = nn.ModuleList([AlibiAttentionHead(embed_dim=embed_dim,
                                                            block_size=block_size,
                                                            head_dim=self.head_dim,
