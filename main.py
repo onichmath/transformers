@@ -174,11 +174,13 @@ def encoder_experiment(tokenizer, utils=False):
             num_heads=n_head,
             num_layers=n_layer,
             dropout=dropout,
+            attention="bigbird",
             ).to(device)
     sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     classifier_utils = Utilities(tokenizer, classifier)
-    if utils:
-        classifier_utils.sanity_check(sanity_string, block_size, device)
+    # print(classifier)
+    # if True:
+    #     classifier_utils.sanity_check(sanity_string, block_size, device)
 
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
@@ -203,6 +205,7 @@ def decoder_experiment(tokenizer, utils=False):
             num_heads=n_head,
             hidden_dim=n_hidden,
             num_layers=n_layer,
+            attention="alibi",
             dropout=0.0,
             ).to(device)
     print("Training decoder model ...")
@@ -231,7 +234,8 @@ def main():
     tokenizer = SimpleTokenizer(' '.join(texts)) # create a tokenizer from the data
     print("Vocabulary size is", tokenizer.vocab_size)
 
-    decoder_experiment(tokenizer, utils=False)
+    encoder_experiment(tokenizer, utils=False)
+    # decoder_experiment(tokenizer, utils=False)
 
 if __name__ == "__main__":
     main()

@@ -145,6 +145,7 @@ class BasicBigBirdAttentionHead(SelfAttentionBase):
     def create_big_bird_mask(self, block_size, num_global, num_local, num_random):
         mask = torch.zeros(block_size, block_size)
         for i in range(num_global):
+            # Global attention
             mask[i, :] = 1
             mask[:, i] = 1
         for i in range(block_size):
