@@ -92,20 +92,17 @@ class SelfAttentionHead(nn.Module):
                          dropout=dropout)
 
     def forward(self, x):
+        # Forward pass for basic self attention
         B, T, C = self.get_sizes(x)
-        q, k, v = self.get_linear_projections(x)
+        q, k, v = self.project_linear_components(x)
 
         # Compute attention weights
         logits = torch.einsum("btc,bTc->bTt", q, k) # B x T x C @ B x T x C -> B x T x T
         logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
-        # If decoder, mask out future tokens
-        if self.autoregression:
-            logits = logits.masked_fill(self.mask[:T, :T] == 0, float("-inf")) # Mask out future tokens if decoder, B x T x T
 
-        weights = F.softmax(logits, dim=-1) # B x T x T
-        regularized_weights = self.dropout(weights)
+        logits = self.mask_logits(logits, T)
+        attention, weights = self.compute_attention(logits, v)
 
-        attention = torch.einsum("btt,btc->btc", regularized_weights, v) # B x T x T @ B x T x C -> B x T x C
         return attention, weights 
 
 class AlibiAttentionHead(nn.Module):
