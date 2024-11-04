@@ -142,11 +142,29 @@ class BasicBigBirdAttentionHead(nn.Module):
         self.key_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False)
         self.value_linear = nn.Linear(self.embed_dim, self.head_dim, bias=False) # What is aggregated from the input sequence
 
+        big_bird_mask = self.create_big_bird_mask(self.block_size, self.block_size // 16, self.block_size // 8, self.block_size // 16)
+
         if self.autoregression:
             # Buffer instead of parameter
             self.register_buffer("mask", torch.tril(torch.ones(self.block_size, self.block_size)))
 
         self.dropout = nn.Dropout(dropout)
+
+    def create_big_bird_mask(self, block_size, num_global, num_local, num_random):
+        mask = torch.zeros(block_size, block_size)
+        for i in range(num_global):
+            mask[i, :] = 1
+            mask[:, i] = 1
+        for i in range(block_size):
+            # Local attention
+            start = max(0, i - num_local)
+            end = min(block_size, i + num_local + 1)
+            mask[i, start:end] = 1
+            # Random attention
+            random_indices = torch.randperm(block_size)[:num_random]
+            mask[i, random_indices] = 1
+        return mask
+
 
     def forward(self, x):
         B, T, C = x.shape
@@ -207,6 +225,12 @@ class MultiHeadAttention(nn.Module):
                                                            autoregression=autoregression,
                                                            slope_bias=slope_biases[i],
                                                            dropout=dropout) for i in range(num_heads)])
+        elif attention == "bigbird":
+            self.heads = nn.ModuleList([BasicBigBirdAttentionHead(embed_dim=embed_dim,
+                                                                 block_size=block_size,
+                                                                 head_dim=self.head_dim,
+                                                                 autoregression=autoregression,
+                                                                 dropout=dropout) for _ in range(num_heads)])
         elif attention == "sparse":
             self.heads = nn.ModuleList([SparseAttentionHead(embed_dim=embed_dim,
                                                             block_size=block_size,
