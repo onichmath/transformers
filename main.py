@@ -137,7 +137,7 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=200):
     decoderLMmodel.train()
     return perplexity
 
-def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer):
+def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer, cls_token):
     """ Train the decoder on the data in data_loader and return mean_loss"""
     decoder.train()
     losses = []
@@ -162,7 +162,10 @@ def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer):
             print(f"Batch {batch}: Train loss: {mean_loss}, Train perplexity: {perplexity}")
             for president in ["hbush", "wbush", "obama"]:
                 test_dataset = LanguageModelingDataset(tokenizer, read_file(f"speechesdataset/test_LM_{president}.txt"), block_size)
-                test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
+                if cls_token:
+                    test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=False)
+                else:
+                    test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
                 test_perplexity = compute_perplexity(decoder, test_loader, eval_iters)
                 print(f"Batch {batch}: Test perplexity for {president}: {test_perplexity}")
 
@@ -176,13 +179,17 @@ def read_file(file):
     with open(file, 'r', encoding='utf-8') as f:
         return f.read()
 
-def encoder_experiment(tokenizer:SimpleTokenizer, utils=False):
+def encoder_experiment(tokenizer:SimpleTokenizer, utils=False, cls_token=False, verbose=False):
     # Encoder
-    train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
-    train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=True)
 
+    train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
     test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/test_CLS.tsv")
-    test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=False)
+    if cls_token:
+        train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
+        test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
+    else:
+        train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=True)
+        test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=False)
 
 
     classifier = Encoder(
@@ -196,10 +203,8 @@ def encoder_experiment(tokenizer:SimpleTokenizer, utils=False):
             ).to(device)
     sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     classifier_utils = Utilities(tokenizer, classifier)
-    # print(classifier)
-    # if True:
-    #     classifier_utils.sanity_check(sanity_string, block_size, device)
-
+    if utils:
+        classifier_utils.sanity_check(sanity_string, block_size, device, prefix="./output/encoder/before")
 
     optimizer = torch.optim.Adam(classifier.parameters(), lr=learning_rate)
     # for the classification  task, you will train for a fixed number of epochs like this:
@@ -209,12 +214,15 @@ def encoder_experiment(tokenizer:SimpleTokenizer, utils=False):
         print(f"Epoch {epoch}: Train loss: {train_loss}, Train accuracy: {train_accuracy}, Test accuracy: {test_accuracy}")
     print(f"Number of parameters in the classifier: {sum(p.numel() for p in classifier.parameters())}")
     if utils:
-        classifier_utils.sanity_check(sanity_string, block_size, device)
+        classifier_utils.sanity_check(sanity_string, block_size, device, prefix="./output/encoder/after")
 
-def decoder_experiment(tokenizer, utils=False):
+def decoder_experiment(tokenizer, utils=False, cls_token=False, verbose=False):
     # Decoder
     train_LM_dataset = LanguageModelingDataset(tokenizer, read_file("speechesdataset/train_LM.txt"),  block_size)
-    train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
+    if cls_token:
+        train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=True)
+    else:
+        train_LM_loader = DataLoader(train_LM_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
 
     decoder = Decoder(
             vocab_size=tokenizer.vocab_size,
@@ -223,26 +231,25 @@ def decoder_experiment(tokenizer, utils=False):
             num_heads=n_head,
             hidden_dim=n_hidden,
             num_layers=n_layer,
-            attention="alibi",
-            dropout=0.0,
+            dropout=dropout,
             ).to(device)
     print("Training decoder model ...")
 
     decoder_utils = Utilities(tokenizer, decoder)
     sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     if utils:
-        decoder_utils.sanity_check(sanity_string, block_size, device)
+        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/before")
 
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
     for epoch in range(1):
-        train_loss, train_perplexity = train_decoder_epoch(decoder, train_LM_loader, optimizer, tokenizer)
+        train_loss, train_perplexity = train_decoder_epoch(decoder, train_LM_loader, optimizer, tokenizer, cls_token)
         # print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
         # if epoch % eval_interval == 0:
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
     if utils:
-        decoder_utils.sanity_check(sanity_string, block_size, device)
+        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/after")
 
 
 
@@ -252,8 +259,8 @@ def main():
     tokenizer = SimpleTokenizer(' '.join(texts)) # create a tokenizer from the data
     print("Vocabulary size is", tokenizer.vocab_size)
 
-    encoder_experiment(tokenizer, utils=False)
-    # decoder_experiment(tokenizer, utils=False)
+    # encoder_experiment(tokenizer, utils=False)
+    decoder_experiment(tokenizer, utils=False, cls_token=True, verbose=False)
 
 if __name__ == "__main__":
     main()
