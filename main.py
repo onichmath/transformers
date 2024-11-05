@@ -17,12 +17,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 """ Hyperparameters to use for training to roughly match 
 the numbers mentioned in the assignment description """
 batch_size = 16  # Number of independent sequences  we will process in parallel
-block_size = 32  # Maximum context length for predictions
+block_size = 32# Maximum context length for predictions
 learning_rate = 1e-3  # Learning rate for the optimizer
 n_embd = 64  # Embedding dimension
 n_head = 2  # Number of attention heads
 n_layer = 4  # Number of transformer layers
 dropout = 0.2
+vocab_size = 5755
 
 
 eval_interval = 100  # How often to evaluate train and test perplexity during training
@@ -60,6 +61,23 @@ def collate_batch(batch):
     padded_sequences = padded_sequences[:, :block_size]  # Truncate if longer
     # Add padding if shorter
     padded_sequences = torch.nn.functional.pad(padded_sequences, (0, max(0, block_size - padded_sequences.shape[1])), "constant", 0)
+    labels = torch.stack(labels)  
+    return padded_sequences, labels
+
+def cls_collate_batch(batch):
+    """ Collate a batch of data into a single tensor with padding."""
+    data, labels = zip(*batch)  # Separate the data and labels
+    # Add a special token for the classifier
+    data_with_cls = [torch.cat([torch.tensor([vocab_size]), d]) for d in data]
+    # Pad sequences to the fixed length
+    padded_sequences = pad_sequence(data, batch_first=True, padding_value=0)
+    padded_sequences = padded_sequences[:, :block_size]  # Truncate if longer
+    # Add padding if shorter
+    padded_sequences = torch.nn.functional.pad(
+            padded_sequences,
+            (0, max(0, block_size - padded_sequences.shape[1])), 
+            "constant", 
+            0)
     labels = torch.stack(labels)  
     return padded_sequences, labels
 
@@ -158,13 +176,14 @@ def read_file(file):
     with open(file, 'r', encoding='utf-8') as f:
         return f.read()
 
-def encoder_experiment(tokenizer, utils=False):
+def encoder_experiment(tokenizer:SimpleTokenizer, utils=False):
     # Encoder
     train_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/train_CLS.tsv")
-    train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=True)
+    train_CLS_loader = DataLoader(train_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=True)
 
     test_CLS_dataset = SpeechesClassificationDataset(tokenizer, "speechesdataset/test_CLS.tsv")
-    test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
+    test_CLS_loader = DataLoader(test_CLS_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=False)
+
 
     classifier = Encoder(
             vocab_size=tokenizer.vocab_size,
@@ -174,7 +193,6 @@ def encoder_experiment(tokenizer, utils=False):
             num_heads=n_head,
             num_layers=n_layer,
             dropout=dropout,
-            attention="bigbird",
             ).to(device)
     sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     classifier_utils = Utilities(tokenizer, classifier)
