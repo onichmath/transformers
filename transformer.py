@@ -170,16 +170,6 @@ class BasicBigBirdAttentionHead(SelfAttentionBase):
 
         attention, weights = self.compute_attention(logits, v)
         return attention, weights 
-
-
-class SparseAttentionHead(nn.Module):
-    pass
-
-class LinformerAttentionHead(nn.Module):
-    pass
-
-class DisentangledAttentionHead(nn.Module):
-    pass
         
 class MultiHeadAttention(nn.Module):
     # Multiple heads of attention based off "Let's build GPT: from scratch, in code, spelled out" by Andrej Karpathy
@@ -208,8 +198,6 @@ class MultiHeadAttention(nn.Module):
             self.heads = nn.ModuleList([AlibiAttentionHead(slope_bias=slope_biases[i], **params) for i in range(num_heads)])
         elif attention == "bigbird":
             self.heads = nn.ModuleList([BasicBigBirdAttentionHead(**params) for _ in range(num_heads)])
-        elif attention == "sparse":
-            self.heads = nn.ModuleList([SparseAttentionHead(**params) for _ in range(num_heads)])
         else:
             raise ValueError(f"Unrecognized attention type: {attention}")
 
