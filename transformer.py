@@ -93,7 +93,7 @@ class SelfAttentionHead(SelfAttentionBase):
 
     def forward(self, x):
         # Forward pass for basic self attention
-        B, T, C = self.get_sizes(x)
+        B, T, C = self.get_shape(x)
         q, k, v = self.project_linear_components(x)
 
         # Compute attention weights
@@ -106,6 +106,7 @@ class SelfAttentionHead(SelfAttentionBase):
         return attention, weights 
 
 class AlibiAttentionHead(SelfAttentionBase):
+    # https://arxiv.org/pdf/2108.12409v2
     def __init__(self, embed_dim, block_size, head_dim, autoregression, slope_bias, dropout):
         super().__init__(embed_dim=embed_dim,
                          block_size=block_size,
@@ -132,6 +133,7 @@ class AlibiAttentionHead(SelfAttentionBase):
         return attention, weights 
 
 class BasicBigBirdAttentionHead(SelfAttentionBase):
+    # https://arxiv.org/pdf/2007.14062v2
     def __init__(self, embed_dim, block_size, head_dim, autoregression, dropout):
         super().__init__(embed_dim=embed_dim,
                          block_size=block_size,
@@ -139,7 +141,8 @@ class BasicBigBirdAttentionHead(SelfAttentionBase):
                          autoregression=autoregression,
                          dropout=dropout)
 
-        big_bird_mask = self.create_big_bird_mask(self.block_size, self.block_size // 16, self.block_size // 8, self.block_size // 16)
+        # Global attention attends to CLS token
+        big_bird_mask = self.create_big_bird_mask(self.block_size, 1, self.block_size // 8, self.block_size // 16)
         self.register_buffer("attention_mask", big_bird_mask)
 
     def create_big_bird_mask(self, block_size, num_global, num_local, num_random):
