@@ -98,7 +98,7 @@ class SelfAttentionHead(SelfAttentionBase):
 
         # Compute attention weights
         logits = torch.einsum("btc,bTc->bTt", q, k) # B x T x C @ B x T x C -> B x T x T
-        logits = logits / (self.embed_dim ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
+        logits = logits / (C ** 0.5) # Divide by sqrt(d_k) to prevent peaky softmax
 
         logits = self.mask_causal_logits(logits, T)
         attention, weights = self.compute_attention(logits, v)
@@ -374,7 +374,7 @@ class Decoder(TransformerBase):
                          position_encoding=position_encoding,
                          attention=attention,
                          dropout=dropout)
-        self.classifier = nn.Linear(embed_dim, vocab_size)
+        self.lm_head = nn.Linear(embed_dim, vocab_size)
 
     def forward(self, x, y=None):
         x = self.embed(x)
@@ -384,9 +384,11 @@ class Decoder(TransformerBase):
             attention_maps.extend(maps)
 
         x = self.layer_norm(x)
-        logits = self.classifier(x)
+        logits = self.lm_head(x)
 
         cross_entropy_loss = None
         if y is not None:
-            cross_entropy_loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
+            logits_flat = logits.view(-1, logits.size(-1))
+            y_flat = y.view(-1)
+            cross_entropy_loss = F.cross_entropy(logits_flat, y_flat)
         return logits, cross_entropy_loss, attention_maps
