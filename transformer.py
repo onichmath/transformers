@@ -319,7 +319,9 @@ class TransformerBase(nn.Module):
         if isinstance(module, nn.Embedding):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
         elif isinstance(module, nn.Linear):
-            nn.init.kaiming_normal_(module.weight)
+            # nn.init.kaiming_normal_(module.weight)
+            # Normal distribution reduces train perplexity to be within range, at cost of test perplexity
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 nn.init.constant_(module.bias, 0)
 
