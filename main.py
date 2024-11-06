@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import os
+import json
 
 from tokenizer import SimpleTokenizer
 from dataset import SpeechesClassificationDataset, LanguageModelingDataset
@@ -137,11 +138,14 @@ def compute_perplexity(decoderLMmodel, data_loader, eval_iters=200):
     decoderLMmodel.train()
     return perplexity
 
-def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer, cls_token):
-    """ Train the decoder on the data in data_loader and return mean_loss"""
+def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer, cls_token, verbose=True):
     decoder.train()
     losses = []
     train_loss = 0
+    train_perplexities = []
+    test_perplexities = {}
+    test_losses = {}
+
     for batch, (X, Y) in enumerate(data_loader):
         if batch > max_iters:
             break
@@ -154,26 +158,46 @@ def train_decoder_epoch(decoder, data_loader, optimizer, tokenizer, cls_token):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+
         if batch % eval_interval == 0:
             print(f"\n")
-            eval_losses = torch.tensor(losses)
+            eval_losses = torch.tensor(losses, dtype=torch.float32)
             mean_loss = eval_losses.mean()
-            perplexity = torch.exp(mean_loss).item()
-            print(f"Batch {batch}: Train loss: {mean_loss}, Train perplexity: {perplexity}")
+            train_perplexity = torch.exp(mean_loss).item()
+            train_perplexities.append(train_perplexity)  # Store train perplexity
+
+            print(f"Batch {batch}: Train loss: {mean_loss}, Train perplexity: {train_perplexity}")
+
+            # Loop over the test datasets (for different presidents)
             for president in ["hbush", "wbush", "obama"]:
                 test_dataset = LanguageModelingDataset(tokenizer, read_file(f"speechesdataset/test_LM_{president}.txt"), block_size)
                 if cls_token:
                     test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=cls_collate_batch, shuffle=False)
                 else:
                     test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=collate_batch, shuffle=False)
-                test_perplexity = compute_perplexity(decoder, test_loader, eval_iters)
-                print(f"Batch {batch}: Test perplexity for {president}: {test_perplexity}")
 
+                # Compute the test perplexity
+                test_perplexity = compute_perplexity(decoder, test_loader, eval_iters)
+                test_perplexities[president] = test_perplexity  # Store test perplexity for each president
+
+    # Final evaluation after epoch
     losses = torch.tensor(losses)
     mean_loss = losses.mean()
-    perplexity = torch.exp(mean_loss).item()
-    mean_loss = train_loss / len(data_loader)
-    return mean_loss, perplexity
+    final_train_perplexity = torch.exp(mean_loss).item()
+
+    # Create a dictionary to store all the results
+    results = {
+        "train_perplexities": train_perplexities,
+        "test_perplexities": test_perplexities,
+        "test_losses": test_losses
+    }
+
+    # Write the results to a JSON file
+    if verbose:
+        with open("/output/decoder/basic.json", "w") as json_file:
+            json.dump(results, json_file, indent=4)
+
+    return mean_loss, final_train_perplexity
 
 def read_file(file):
     with open(file, 'r', encoding='utf-8') as f:
@@ -196,7 +220,7 @@ def encoder_experiment(tokenizer:SimpleTokenizer, utils=False, cls_token=False, 
             vocab_size=tokenizer.vocab_size,
             embed_dim=n_embd,
             block_size=block_size,
-            hidden_dim=n_embd * 4, # 4x embed based off "Attention is All You Need" paper
+            hidden_dim=n_hidden, # 4x embed based off "Attention is All You Need" paper
             num_heads=n_head,
             num_layers=n_layer,
             dropout=dropout,
@@ -231,14 +255,13 @@ def decoder_experiment(tokenizer, utils=False, cls_token=False, verbose=False):
             num_heads=n_head,
             hidden_dim=n_hidden,
             num_layers=n_layer,
-            dropout=dropout,
+            dropout=0.0,
             ).to(device)
-    print("Training decoder model ...")
 
     decoder_utils = Utilities(tokenizer, decoder)
     sanity_string = "The third source of tension is our shared interest in the rights and responsibilities of nations on nuclear weapons."
     if utils:
-        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/before")
+        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/before_base")
 
     optimizer = torch.optim.Adam(decoder.parameters(), lr=learning_rate)
 
@@ -249,7 +272,7 @@ def decoder_experiment(tokenizer, utils=False, cls_token=False, verbose=False):
         #     print(f"Epoch {epoch}: Train loss: {train_loss}, Train perplexity: {train_perplexity}")
     print(f"Number of parameters in the decoder: {sum(p.numel() for p in decoder.parameters())}")
     if utils:
-        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/after")
+        decoder_utils.sanity_check(sanity_string, block_size, device, prefix="./output/decoder/after_base")
 
 
 
