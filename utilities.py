@@ -40,11 +40,11 @@ class Utilities:
             ax.xaxis.tick_top()  
             fig.colorbar(cax, ax=ax)  
             plt.title(f"Attention Map {j + 1}")
-            plt.xticks(range(len(padded_sentence)), [self.tokenizer.itos[i] for i in padded_sentence], rotation=90, ha='center')
-            plt.yticks(range(len(padded_sentence)), [self.tokenizer.itos[i] for i in padded_sentence], va='center')
 
+            plt.xticks(range(len(padded_sentence)), [self.tokenizer.itos[i] for i in padded_sentence], rotation=90)
+            plt.yticks(range(len(padded_sentence)), [self.tokenizer.itos[i] for i in padded_sentence])
 
-            plt.tight_layout(pad=2)
+            plt.tight_layout()
             # Save the plot
             plt.savefig(f"{prefix}_attention_map_{j + 1}.png")
             
