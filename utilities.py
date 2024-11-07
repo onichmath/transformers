@@ -46,11 +46,11 @@ class Utilities:
 
             plt.tight_layout()
             # Save the plot
-            plt.savefig(f"{prefix}_attention_map_{j + 1}.png")
+            # plt.savefig(f"{prefix}_attention_map_{j + 1}.png")
             # Show the plot
-            # plt.show()
+            plt.show()
             plt.close()
-        print(f"Attention maps saved to {prefix}_attention_map_n.png")
+        # print(f"Attention maps saved to {prefix}_attention_map_n.png")
             
 
 
