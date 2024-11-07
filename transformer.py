@@ -147,10 +147,8 @@ class BasicBigBirdAttentionHead(SelfAttentionBase):
 
     def create_big_bird_mask(self, block_size, num_global, num_local, num_random):
         mask = torch.zeros(block_size, block_size)
-        for i in range(num_global):
-            # Global attention
-            mask[i, :] = 1
-            mask[:, i] = 1
+        mask[0, :] = 1  # [CLS] attends to all tokens
+        mask[:, 0] = 1
         for i in range(block_size):
             # Local attention
             start = max(0, i - num_local)
@@ -304,7 +302,10 @@ class TransformerBase(nn.Module):
         else:
             self.position_encoding = None
 
-        self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
+        if attention == "bigbird":
+            self.token_embedding_table = nn.Embedding(vocab_size + 1, embed_dim)
+        else:
+            self.token_embedding_table = nn.Embedding(vocab_size, embed_dim)
 
         # Transformer blocks
         self.blocks = nn.ModuleList([
